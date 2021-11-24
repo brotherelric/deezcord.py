@@ -37,7 +37,7 @@ from .emoji import Emoji
 from .partial_emoji import PartialEmoji
 from .enums import MessageType, ChannelType, try_enum
 from .errors import InvalidArgument, HTTPException
-from .components import _component_factory
+from .components import ComponentStore
 from .embeds import Embed
 from .member import Member
 from .flags import MessageFlags
@@ -669,7 +669,7 @@ class Message(Hashable):
         self.content: str = data['content']
         self.nonce: Optional[Union[int, str]] = data.get('nonce')
         self.stickers: List[StickerItem] = [StickerItem(data=d, state=state) for d in data.get('sticker_items', [])]
-        self.components: List[Component] = [_component_factory(d) for d in data.get('components', [])]
+        self.components: ComponentStore = ComponentStore.from_dict(data.get('components', []))
 
         try:
             # if the channel doesn't have a guild attribute, we handle that
@@ -872,7 +872,7 @@ class Message(Hashable):
                     self.role_mentions.append(role)
 
     def _handle_components(self, components: List[ComponentPayload]):
-        self.components = [_component_factory(d) for d in components]
+        self.components = ComponentStore.from_dict(components)
 
     def _rebind_cached_references(self, new_guild: Guild, new_channel: Union[TextChannel, Thread]) -> None:
         self.guild = new_guild

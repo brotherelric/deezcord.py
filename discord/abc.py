@@ -53,6 +53,7 @@ from .invite import Invite
 from .file import File
 from .voice_client import VoiceClient, VoiceProtocol
 from .sticker import GuildSticker, StickerItem
+from .components import Button, LinkButton, SelectMenu, ComponentStore
 from . import utils
 
 __all__ = (
@@ -1163,7 +1164,7 @@ class Messageable:
         allowed_mentions: AllowedMentions = ...,
         reference: Union[Message, MessageReference, PartialMessage] = ...,
         mention_author: bool = ...,
-        view: View = ...,
+        components: List[Union[Button, LinkButton, SelectMenu]] = ...,
     ) -> Message:
         ...
 
@@ -1181,7 +1182,7 @@ class Messageable:
         allowed_mentions: AllowedMentions = ...,
         reference: Union[Message, MessageReference, PartialMessage] = ...,
         mention_author: bool = ...,
-        view: View = ...,
+        components: List[Union[Button, LinkButton, SelectMenu]] = ...,
     ) -> Message:
         ...
 
@@ -1199,7 +1200,7 @@ class Messageable:
         allowed_mentions: AllowedMentions = ...,
         reference: Union[Message, MessageReference, PartialMessage] = ...,
         mention_author: bool = ...,
-        view: View = ...,
+        components: List[Union[Button, LinkButton, SelectMenu]] = ...,
     ) -> Message:
         ...
 
@@ -1217,7 +1218,7 @@ class Messageable:
         allowed_mentions: AllowedMentions = ...,
         reference: Union[Message, MessageReference, PartialMessage] = ...,
         mention_author: bool = ...,
-        view: View = ...,
+        components: List[Union[Button, LinkButton, SelectMenu]] = ...,
     ) -> Message:
         ...
 
@@ -1236,7 +1237,7 @@ class Messageable:
         allowed_mentions=None,
         reference=None,
         mention_author=None,
-        view=None,
+        components=None
     ):
         """|coro|
 
@@ -1363,11 +1364,8 @@ class Messageable:
             except AttributeError:
                 raise InvalidArgument('reference parameter must be Message, MessageReference, or PartialMessage') from None
 
-        if view:
-            if not hasattr(view, '__discord_ui_view__'):
-                raise InvalidArgument(f'view parameter must be View not {view.__class__!r}')
-
-            components = view.to_components()
+        if components is not None:
+            components = ComponentStore(components).to_dict()
         else:
             components = None
 
@@ -1433,8 +1431,8 @@ class Messageable:
             )
 
         ret = state.create_message(channel=channel, data=data)
-        if view:
-            state.store_view(view, ret.id)
+        # if view:
+        #     state.store_view(view, ret.id)
 
         if delete_after is not None:
             await ret.delete(delay=delete_after)

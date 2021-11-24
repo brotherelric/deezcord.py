@@ -90,7 +90,10 @@ DISCORD_EPOCH = 1420070400000
 
 
 class _MissingSentinel:
-    def __eq__(self, other):
+    def __eq__(self, _):
+        return False
+
+    def __contains__(self, _):
         return False
 
     def __bool__(self):
@@ -101,6 +104,21 @@ class _MissingSentinel:
 
 
 MISSING: Any = _MissingSentinel()
+
+class _AllSentinel:
+    def __eq__(self, _):
+        return True
+
+    def __contains__(self, _):
+        return True
+
+    def __bool__(self):
+        return True
+    
+    def __repr__(self):
+        return 'All'
+
+All: Any = _AllSentinel()
 
 
 class _cached_property:

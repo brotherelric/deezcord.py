@@ -24,12 +24,12 @@ DEALINGS IN THE SOFTWARE.
 
 from __future__ import annotations
 
-from typing import Any, ClassVar, Dict, List, Optional, TYPE_CHECKING, Tuple, Type, TypeVar, Union
-from string import ascii_letters
+from typing import Any, ClassVar, Dict, List, Optional, TYPE_CHECKING, Tuple, Type, TypeVar, Union, overload
+from string import printable
 from random import choice
 
 from .enums import get_enum, ComponentType, ButtonStyle
-from .utils import get_slots, MISSING
+from .utils import get_slots, MISSING, All
 from .partial_emoji import PartialEmoji, _EmojiTag
 
 if TYPE_CHECKING:
@@ -53,7 +53,6 @@ __all__ = (
 )
 
 C = TypeVar('C', bound='Component')
-
 
 class Component:
     """Represents a Discord Bot UI Kit Component.
@@ -98,38 +97,6 @@ class Component:
     def to_dict(self) -> Dict[str, Any]:
         raise NotImplementedError
 
-
-class ActionRow(Component):
-    """Represents a Discord Bot UI Kit Action Row.
-
-    This is a component that holds up to 5 children components in a row.
-
-    This inherits from :class:`Component`.
-
-    .. versionadded:: 2.0
-
-    Attributes
-    ------------
-    type: :class:`ComponentType`
-        The type of component.
-    children: List[:class:`Component`]
-        The children components that this holds, if any.
-    """
-
-    __slots__: Tuple[str, ...] = ('children',)
-
-    __repr_info__: ClassVar[Tuple[str, ...]] = __slots__
-
-    def __init__(self, data: ComponentPayload):
-        self.type: ComponentType = get_enum(ComponentType, data['type'])
-        self.children: List[Component] = [_component_factory(d) for d in data.get('components', [])]
-
-    def to_dict(self) -> ActionRowPayload:
-        return {
-            'type': int(self.type),
-            'components': [child.to_dict() for child in self.children],
-        }  # type: ignore
-
 class BaseButton(Component):
     __slots__: Tuple[str, ...] = (
         'style',
@@ -143,13 +110,15 @@ class BaseButton(Component):
 
     __repr_info__: ClassVar[Tuple[str, ...]] = __slots__
     
-    def __init__(self, style, custom_id=None, url=None, disabled=False, label=None, emoji=None):
-        self.type = ComponentType.button
+    def __init__(self, style, custom_id=MISSING, url=None, disabled=False, label=MISSING, emoji=None):
         self.style: ButtonStyle = get_enum(ButtonStyle, style)
-        self.custom_id: Optional[str] = ''.join([choice(ascii_letters) for _ in range(20)]) if custom_id is MISSING else custom_id
+        self.custom_id: Optional[str] = (
+            (''.join([choice(printable) for _ in range(20)]) if custom_id is MISSING else custom_id)
+                if url is None else None
+        )
         self.url: Optional[str] = url
 
-        self.label: str = "\u200b" if label is None else  label
+        self.label: str = "\u200b" if label is MISSING else label
         self.disabled: str = disabled
         self.emoji: Optional[PartialEmoji] = None
         if emoji is not None:
@@ -223,10 +192,10 @@ class SelectMenu(Component):
         placeholder:Optional[str]=None, disabled=False
     ):
         self.type = ComponentType.select
-        self.custom_id = ''.join([choice(ascii_letters) for _ in range(20)]) if custom_id is MISSING else custom_id 
+        self.custom_id = ''.join([choice(printable) for _ in range(20)]) if custom_id is MISSING else custom_id 
         self.placeholder = placeholder
         self.min_values = min_values or 1
-        self.max_values = max_values or min_values
+        self.max_values = max_values or self.min_values
         self.disabled = disabled or False
         self.options = options
 
@@ -330,11 +299,137 @@ class SelectOption:
 
         return payload
 
+component = Union[Button, LinkButton, SelectMenu]
+
+class ActionRow():
+
+    def __repr__(self):
+        return f"<{self.__class__.__name__} {self.components!r}>"
+
+    def __init__(self, components):
+        self.components: List[component] = components
+    
+    def _get_index(self, key):
+        if isinstance(key, str):
+            r = [i for i, x in enumerate(self.components) if x.custom_id == key]
+            if len(r) > 0:
+                return r
+            raise KeyError(r)
+        return key
+    def __getitem__(self, key) -> component:
+        return self.components[self._get_index(key)]
+    def __setitem__(self, key, value):
+        self.components[self._get_index(key)] = value
+    def __delitem__(self, key):
+        self.components.pop(self._get_index(key))
+
+    def to_dict(self) -> ComponentPayload:
+        return {
+            "type": int(ComponentType.action_row),
+            "components": [c.to_dict() for c in self.components]
+        }
+    @classmethod
+    def from_dict(cls, data: ComponentPayload):
+        return cls([_component_factory(c) for c in data["components"]])
+
+    def disable(self, disable=True, components=All):
+        if isinstance(components, int):
+            rows = (components,)
+        if rows is All:
+            rows = range(len(self.components))
+        for i in rows:
+            self[i].disable(disable)
+        return self
+    def clear(self):
+        self.components = []
+    @property
+    def buttons(self) -> List[Union[Button, LinkButton]]:
+        return [self.components[i] for i, x in enumerate(self.components) if x.type == ComponentType.Button]
+    @property
+    def selects(self) -> List[SelectMenu]:
+        return [self.components[i] for i, x in enumerate(self.components) if x.type == ComponentType.Select]
+
+class ComponentStore:
+    __slots__ = ('rows',)
+
+    def __repr__(self):
+        return f"<{self.__class__.__name__} {self.rows!r}>"
+
+    def __init__(self, components=[]):
+        self.rows: List[ActionRow] = []
+        if any(isinstance(x, (list, tuple)) for x in components):
+            for i, _ in components:
+                if isinstance(components[i], (list, tuple)):
+                    self.rows.append(ActionRow(components[i]))
+                else:
+                    self.rows.append(ActionRow([components[i]]))
+        elif isinstance(components, ActionRow):
+            self.add_row(ActionRow)
+        else:
+            row = []
+            for i, c in enumerate(components):
+                if isinstance(c, (SelectMenu, ActionRow)):
+                    if len(row) > 0:
+                        self.rows.append(ActionRow(row))
+                        row = []
+                    if isinstance(c, SelectMenu):
+                        self.rows.append(ActionRow([components[i]]))
+                    else:
+                        self.add_row(components[i])
+                    continue
+                row.append(components[i])
+            # if some rows are left
+            if len(row) > 0:
+                self.rows.append(ActionRow(row))
+    def __getitem__(self, key) -> ActionRow:
+        return self.rows[key]
+    def __setitem__(self, key, value):
+        self.rows[key] = value
+    def __delitem__(self, key):
+        self.rows.pop(key)
+      
+    @classmethod
+    def from_dict(cls, data: List[ComponentPayload]):
+        return cls([_component_factory(c) for c in data])
+    def to_dict(self):
+        return [r.to_dict() for r in self.rows]
+
+    @overload
+    def add_row(self, *components):
+        ...
+    @overload
+    def add_row(self, components: list = ...):
+        ...
+    def add_row(self, *components):
+        if isinstance(components, list):
+            components = components[0]
+        self.rows.append(list(components))
+        return self
+    def get_row(self, index) -> ActionRow:
+        return self.rows[index]
+    
+    def disable(self, disable=True, rows=All):
+        """
+        Disables or enables component(s)
+
+        disable: :class:`bool`, optional
+            Whether to disable (``True``) or enable (``False``) components; default True
+        rows: :class:`int` | :class:`range` | List[:class:`int`] | Tuple[:class:`int`], optional
+            Index(es) of rows that should be disabled; default All
+        """
+        if isinstance(rows, int):
+            rows = (rows,)
+        if rows is All:
+            rows = range(len(self.rows))
+        for i in rows:
+            self.rows[i].disable(disable)
+        return self
+
 
 def _component_factory(data: ComponentPayload) -> Component:
     component_type = data['type']
     if component_type == 1:
-        return ActionRow(data)
+        return ActionRow.from_dict(data)
     elif component_type == 2:
         return BaseButton.from_dict(data)  # type: ignore
     elif component_type == 3:
