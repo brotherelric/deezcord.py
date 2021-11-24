@@ -109,6 +109,10 @@ class PartialEmoji(_EmojiTag, AssetMixin):
             animated=data.get('animated', False),
             id=utils._get_as_snowflake(data, 'id'),
             name=data.get('name') or '',
+        ) if isinstance(data, dict) else cls(
+            animated=False,
+            id=None,
+            name=data
         )
 
     @classmethod

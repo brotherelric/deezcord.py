@@ -597,6 +597,19 @@ def create_unknown_value(cls: Type[T], val: Any) -> T:
     name = f'unknown_{val}'
     return value_cls(name=name, value=val)
 
+def get_enum(cls: Type[T], val: Any) -> T:
+    """A function that treis to turn the value into enum ``cls``.
+    
+    This will work for the raw value (``3``), the instance ``cls.some_enum`` and the name (``some_enum``)
+    """
+    if hasattr(val, "value"):
+        val = val.value
+    try:
+        return cls._enum_value_map_[val] # type: ignore
+    except (KeyError, TypeError, AttributeError):
+        if isinstance(val, str):
+            return try_enum(cls, getattr(cls, val).value)
+        return create_unknown_value(cls, val)
 
 def try_enum(cls: Type[T], val: Any) -> T:
     """A function that tries to turn the value into enum ``cls``.

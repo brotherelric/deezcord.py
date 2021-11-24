@@ -55,11 +55,11 @@ packages = [
 ]
 
 setup(name='discord.py',
-      author='Rapptz',
-      url='https://github.com/Rapptz/discord.py',
+      author='Rapptz, 404kuso',
+      url='https://github.com/404kuso/disfork.py',
       project_urls={
         "Documentation": "https://discordpy.readthedocs.io/en/latest/",
-        "Issue tracker": "https://github.com/Rapptz/discord.py/issues",
+        "Issue tracker": "https://github.com/404kuso/disfork.py/issues",
       },
       version=version,
       packages=packages,
