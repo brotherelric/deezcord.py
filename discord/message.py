@@ -1156,7 +1156,7 @@ class Message(Hashable):
         suppress: bool = ...,
         delete_after: Optional[float] = ...,
         allowed_mentions: Optional[AllowedMentions] = ...,
-        view: Optional[View] = ...,
+        components: Optional[List[Component]] = ...,
     ) -> Message:
         ...
 
@@ -1170,7 +1170,7 @@ class Message(Hashable):
         suppress: bool = ...,
         delete_after: Optional[float] = ...,
         allowed_mentions: Optional[AllowedMentions] = ...,
-        view: Optional[View] = ...,
+        components: Optional[List[Component]] = ...,
     ) -> Message:
         ...
 
@@ -1183,7 +1183,7 @@ class Message(Hashable):
         suppress: bool = MISSING,
         delete_after: Optional[float] = None,
         allowed_mentions: Optional[AllowedMentions] = MISSING,
-        view: Optional[View] = MISSING,
+        components: Optional[List[Component]] = MISSING,
     ) -> Message:
         """|coro|
 
@@ -1279,19 +1279,15 @@ class Message(Hashable):
         if attachments is not MISSING:
             payload['attachments'] = [a.to_dict() for a in attachments]
 
-        if view is not MISSING:
-            self._state.prevent_view_updates_for(self.id)
-            if view:
-                payload['components'] = view.to_components()
+        if components is not MISSING:
+            if components:
+                payload['components'] = ComponentStore(components).to_dict()
             else:
                 payload['components'] = []
 
         data = await self._state.http.edit_message(self.channel.id, self.id, **payload)
         message = Message(state=self._state, channel=self.channel, data=data)
-
-        if view and not view.is_finished():
-            self._state.store_view(view, self.id)
-
+        
         if delete_after is not None:
             await self.delete(delay=delete_after)
 

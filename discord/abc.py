@@ -53,7 +53,7 @@ from .invite import Invite
 from .file import File
 from .voice_client import VoiceClient, VoiceProtocol
 from .sticker import GuildSticker, StickerItem
-from .components import Button, LinkButton, SelectMenu, ComponentStore
+from .components import Component, ComponentStore
 from . import utils
 
 __all__ = (
@@ -1164,7 +1164,7 @@ class Messageable:
         allowed_mentions: AllowedMentions = ...,
         reference: Union[Message, MessageReference, PartialMessage] = ...,
         mention_author: bool = ...,
-        components: List[Union[Button, LinkButton, SelectMenu]] = ...,
+        components: List[Component] = ...,
     ) -> Message:
         ...
 
@@ -1182,7 +1182,7 @@ class Messageable:
         allowed_mentions: AllowedMentions = ...,
         reference: Union[Message, MessageReference, PartialMessage] = ...,
         mention_author: bool = ...,
-        components: List[Union[Button, LinkButton, SelectMenu]] = ...,
+        components: List[Component] = ...,
     ) -> Message:
         ...
 
@@ -1200,7 +1200,7 @@ class Messageable:
         allowed_mentions: AllowedMentions = ...,
         reference: Union[Message, MessageReference, PartialMessage] = ...,
         mention_author: bool = ...,
-        components: List[Union[Button, LinkButton, SelectMenu]] = ...,
+        components: List[Component] = ...,
     ) -> Message:
         ...
 
@@ -1218,7 +1218,7 @@ class Messageable:
         allowed_mentions: AllowedMentions = ...,
         reference: Union[Message, MessageReference, PartialMessage] = ...,
         mention_author: bool = ...,
-        components: List[Union[Button, LinkButton, SelectMenu]] = ...,
+        components: List[Component] = ...,
     ) -> Message:
         ...
 
@@ -1366,8 +1366,6 @@ class Messageable:
 
         if components is not None:
             components = ComponentStore(components).to_dict()
-        else:
-            components = None
 
         if file is not None and files is not None:
             raise InvalidArgument('cannot pass both file and files parameter to send()')
