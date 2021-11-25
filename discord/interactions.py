@@ -58,9 +58,7 @@ if TYPE_CHECKING:
     from .state import ConnectionState
     from .file import File
     from .mentions import AllowedMentions
-    from aiohttp import ClientSession
     from .embeds import Embed
-    from .ui.view import View
     from .channel import VoiceChannel, StageChannel, TextChannel, CategoryChannel, StoreChannel, PartialMessageable
     from .threads import Thread
 
@@ -73,10 +71,13 @@ MISSING: Any = utils.MISSING
 
 
 class ResponseMessage(Message):
+
+    __slots__ = Message.__slots__ + ('application_id', 'token',)
+
     def __init__(self, *, state: ConnectionState, channel, data, application_id, token):
         super().__init__(state=state, channel=channel, data=data)
-        self.application_id = application_id
-        self.token = token
+        self.token: str = token
+        self.application_id: int = int(application_id)
 
     async def edit(
         self, 
@@ -228,7 +229,7 @@ class Interaction:
 
     def __init__(self, state: ConnectionState, data: InteractionPayload) -> None:
         self._state = state
-
+        
         self.deferred: bool = False
         self.responded: bool = False
         self._deferred_hidden: bool = False
@@ -244,9 +245,9 @@ class Interaction:
         self.version: int = data["version"]
         self.data: InteractionData = data["data"]
         """The passed data of the interaction"""
-        self.channel_id: Optional[int] = int(data.get("channel_id")) if data.get("channel_id") is not None else None
+        self.channel_id: Optional[int] = utils._get_as_snowflake(data, "channel_id")
         """The channel-id where the interaction was created"""
-        self.guild_id: Optional[int] = int(data["guild_id"]) if data.get("guild_id") is not None else None
+        self.guild_id: Optional[int] = utils._get_as_snowflake(data, "guild_id")
         """The guild-id where the interaction was created"""
 
         self.author: Optional[Union[Member, User]] = None
