@@ -84,6 +84,7 @@ __all__ = (
     'escape_mentions',
     'as_chunks',
     'format_dt',
+    'get_form'
 )
 
 DISCORD_EPOCH = 1420070400000
@@ -513,6 +514,19 @@ else:
         return json.dumps(obj, separators=(',', ':'), ensure_ascii=True)
 
     _from_json = json.loads
+
+
+
+def get_form(files: Iterable, payload):
+    """Generates formdata for a list of files"""
+    return [{'name': 'payload_json', 'value': _to_json(payload)}] + [
+            {
+                'name': 'file' if len(files) == 1 else f'file{i}',
+                'value': f.fp,
+                'filename': f.filename,
+                'content_type': 'application/octet-stream',
+            } for i, f in enumerate(files)
+        ]
 
 
 def _parse_ratelimit_header(request: Any, *, use_clock: bool = False) -> float:

@@ -51,7 +51,7 @@ import aiohttp
 from .errors import HTTPException, Forbidden, NotFound, LoginFailure, DiscordServerError, GatewayNotFound, InvalidArgument
 from .gateway import DiscordClientWebSocketResponse
 from . import __version__, utils
-from .utils import MISSING
+from .utils import MISSING, get_form
 
 _log = logging.getLogger(__name__)
 
@@ -108,7 +108,7 @@ async def json_or_text(response: aiohttp.ClientResponse) -> Union[Dict[str, Any]
 
 
 class Route:
-    BASE: ClassVar[str] = 'https://discord.com/api/v8'
+    BASE: ClassVar[str] = 'https://discord.com/api/v9'
 
     def __init__(self, method: str, path: str, **parameters: Any) -> None:
         self.path: str = path
@@ -156,9 +156,143 @@ class MaybeUnlock:
 aiohttp.hdrs.WEBSOCKET = 'websocket'  # type: ignore
 
 
-class HTTPClient:
-    """Represents an HTTP client sending HTTP requests to the Discord API."""
+# class x():
+#     async def fetch_command(self, id, guild_id=None):
+#         try:
+#             if guild_id:
+#                 return await self._http.request(BetterRoute("GET",f"/applications/{self.application_id}/guilds/{guild_id}/commands/{id}"))
+#             return await self._http.request(BetterRoute("GET", f"/applications/{self.application_id}/commands/{id}"))
+#         except HTTPException as ex:
+#             if ex.status == 429:
+#                 await handle_rate_limit(await ex.response.json())
+#                 return await self.fetch_command(id, guild_id)
+#             raise ex
+#     async def get_command(self, command_name, guild_id=None, type=None):
+#         return get(
+#             (
+#                 await self.get_global_commands()
+#             ) if guild_id is None else (
+#                 await self.get_guild_commands(guild_id)
+#             ), check=lambda x: x.get("name") == command_name and (type or x.get("type")) == x.get("type")
+#         )
+#     async def get_id(self, command_name, guild_id=None, type=None):
+#         found = await self.get_command(command_name, guild_id, getattr(type, "value", type))
+#         if found is None:
+#             raise NoCommandFound("No command found with name '" + command_name + "'")
+#         return found.get('id')
 
+#     async def delete_global_commands(self):
+#         commands = await self._http.request(BetterRoute("GET", f"/applications/{self.application_id}/commands"))
+#         for x in commands:
+#             await self.delete_global_command(x["id"])
+#     async def delete_guild_commands(self, guild_id):
+#         try:
+#             commands = await self._http.request(BetterRoute("GET", f"/applications/{self.application_id}/guilds/{guild_id}/commands"))
+#             for x in commands:
+#                 await self.delete_guild_command( x["id"], guild_id)
+#         except Forbidden:
+#             logging.warn("got forbidden in " + str(guild_id))
+
+#     async def delete_global_command(self, command_id):
+#         try:
+#             return await self._http.request(BetterRoute("DELETE", f"/applications/{self.application_id}/commands/{command_id}"))
+#         except HTTPException as ex:
+#             if ex.status == 429:
+#                 await handle_rate_limit(await ex.response.json())
+#                 return await self.delete_global_command(command_id)
+#             raise ex
+#     async def delete_guild_command(self, command_id, guild_id):
+#         try:
+#             return await self._http.request(BetterRoute("DELETE", f"/applications/{self.application_id}/guilds/{guild_id}/commands/{command_id}"))
+#         except HTTPException as ex:
+#             if ex.status == 429:
+#                 await handle_rate_limit(await ex.response.json())
+#                 return await self.delete_guild_command(command_id, guild_id)
+#             raise ex
+
+#     async def get_command_permissions(self, command_id, guild_id):
+#         try:
+#             return await self._http.request(BetterRoute("GET", f"/applications/{self.application_id}/guilds/{guild_id}/commands/{command_id}/permissions"))
+#         except NotFound:
+#             return {"id": command_id, "application_id": self.application_id, "permissions": []}
+#         except HTTPException as ex:
+#             if ex.status == 429:
+#                 await handle_rate_limit(await ex.response.json())
+#                 return await self.get_command_permissions(command_id, guild_id)
+#             else:
+#                 raise ex
+#     async def update_command_permissions(self, guild_id, command_id, permissions):
+#         async with aiohttp.ClientSession() as client:
+#             async with client.put(f"https://discord.com/api/v9/applications/{self.application_id}/guilds/{guild_id}/commands/{command_id}/permissions",
+#                 headers={"Authorization": "Bot " + self.token}, json={"permissions": permissions}) as response:
+#                 if response.status == 200:
+#                     return await response.json()
+#                 elif response.status == 429:
+#                     data = await handle_rate_limit(await response.json())
+#                     await self.update_command_permissions(guild_id, command_id, permissions)
+#                     return data
+#                 raise HTTPException(response, response.content)
+
+#     async def create_global_command(self, command: dict):
+#         try:
+#             return await self._http.request(BetterRoute("POST", f"/applications/{self.application_id}/commands"), json=command)
+#         except HTTPException as ex:
+#             if ex.status == 429:
+#                 await handle_rate_limit(await ex.response.json())
+#                 return await self.create_global_command(command)
+#             raise ex
+#     async def create_guild_command(self, command, guild_id, permissions = []):
+#         try:
+#             data = await self._http.request(BetterRoute("POST", f"/applications/{self.application_id}/guilds/{guild_id}/commands"), json=command)
+#             await self.update_command_permissions(guild_id, data["id"], permissions)
+#             return data
+#         except HTTPException as ex:
+#             if ex.status == 429:
+#                 await handle_rate_limit(await ex.response.json())
+#                 return await self.create_guild_command(command, guild_id, permissions)
+#             raise ex
+
+
+#     async def edit_global_command(self, command_id: str, new_command: dict):
+#         try:
+#             return await self._http.request(BetterRoute("PATCH", f"/applications/{self.application_id}/commands/{command_id}"), json=new_command)
+#         except HTTPException as ex:
+#             if ex.status == 429:
+#                 await handle_rate_limit(await ex.response.json())
+#                 return await self.edit_global_command(command_id, new_command)
+#             raise ex
+#     async def edit_guild_command(self, command_id, guild_id: str, new_command: dict, permissions: dict=None):
+#         try:
+#             data = await self._http.request(BetterRoute("PATCH", f"/applications/{self.application_id}/guilds/{guild_id}/commands/{command_id}"), json=new_command)
+#             if permissions is not None:
+#                 return await self.update_command_permissions(guild_id, data["id"], permissions)
+#         except HTTPException as ex:
+#             if ex.status == 429:
+#                 await handle_rate_limit(await ex.response.json())
+#                 return await self.edit_guild_command(command_id, guild_id, new_command, permissions)
+#             raise ex
+
+#     async def get_global_commands(self):
+#         try:
+#             return await self._http.request(BetterRoute("GET", f"/applications/{self.application_id}/commands"))
+#         except HTTPException as ex:
+#             if ex.status == 429:
+#                 await handle_rate_limit(await ex.response.json())
+#                 return await self.get_global_commands()
+#             raise ex
+#     async def get_guild_commands(self, guild_id):
+#         try:
+#             return await self._http.request(BetterRoute("GET", f"/applications/{self.application_id}/guilds/{guild_id}/commands"))
+#         except HTTPException as ex:
+#             if ex.status == 429:
+#                 await handle_rate_limit(await ex.response.json())
+#                 return await self.get_guild_commands(guild_id)
+#             if ex.status == 403:
+#                 logging.warning("got forbidden in " + str(guild_id))
+#                 return []
+#             raise ex
+
+class HTTPClient:
     def __init__(
         self,
         connector: Optional[aiohttp.BaseConnector] = None,
@@ -180,7 +314,7 @@ class HTTPClient:
         self.proxy_auth: Optional[aiohttp.BasicAuth] = proxy_auth
         self.use_clock: bool = not unsync_clock
 
-        user_agent = 'DiscordBot (https://github.com/Rapptz/discord.py {0}) Python/{1[0]}.{1[1]} aiohttp/{2}'
+        user_agent = 'DiscordBot (fork of https://github.com/Rapptz/discord.py {0}) Python/{1[0]}.{1[1]} aiohttp/{2}'
         self.user_agent: str = user_agent.format(__version__, sys.version_info, aiohttp.__version__)
 
     def recreate(self) -> None:
@@ -350,7 +484,7 @@ class HTTPClient:
                 raise HTTPException(response, data)
 
             raise RuntimeError('Unreachable code in HTTP handling')
-
+    
     async def get_from_cdn(self, url: str) -> bytes:
         async with self.__session.get(url) as resp:
             if resp.status == 200:
@@ -361,6 +495,16 @@ class HTTPClient:
                 raise Forbidden(resp, 'cannot retrieve asset')
             else:
                 raise HTTPException(resp, 'failed to get asset')
+
+    # interactions
+    async def respond_to(self, id, token, response_type, data=None, files=None):
+        route = Route("POST", f'/interactions/{id}/{token}/callback')
+        payload = {"type": getattr(response_type, "value", response_type)}
+        if data is not None:
+            payload["data"] = data
+        if files is not None:
+            return await self.request(route, files=files, form=get_form(files, payload))
+        return await self.request(route, json=payload)
 
     # state management
 
@@ -473,6 +617,7 @@ class HTTPClient:
         message_reference: Optional[message.MessageReference] = None,
         stickers: Optional[List[sticker.StickerItem]] = None,
         components: Optional[List[components.Component]] = None,
+        flags: Optional[int]=None
     ) -> Response[message.Message]:
         form = []
 
@@ -493,6 +638,8 @@ class HTTPClient:
             payload['components'] = components
         if stickers:
             payload['sticker_ids'] = stickers
+        if flags:
+            payload["flags"] = flags
 
         form.append({'name': 'payload_json', 'value': utils._to_json(payload)})
         if len(files) == 1:
