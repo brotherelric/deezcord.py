@@ -234,31 +234,32 @@ class Interaction:
         self.responded: bool = False
         self._deferred_hidden: bool = False
  
-        self.application_id: int = data["application_id"]
-        """The ID of the bot application"""
-        self.token: str = data["token"]
-        """The token for responding to the interaction"""
         self.id: int = int(data["id"])
-        """The id of the interaction"""
+        """id of the interaction"""
+        self.application_id: int = data["application_id"]
+        """id of the application this interaction is for"""
         self.type: int = data["type"]
-        """The type of the interaction. See :class:`~InteractionType` for more information"""
-        self.version: int = data["version"]
+        """The type of interaction. See :class:`~InteractionType` for more information"""
         self.data: InteractionData = data["data"]
         """The passed data of the interaction"""
         self.channel_id: Optional[int] = utils._get_as_snowflake(data, "channel_id")
-        """The channel-id where the interaction was created"""
+        """id of channel where the interaction was created"""
         self.guild_id: Optional[int] = utils._get_as_snowflake(data, "guild_id")
-        """The guild-id where the interaction was created"""
-
+        """id of guild where the interaction was created"""
         self.author: Optional[Union[Member, User]] = None
         """The user who created the interaction"""
+        self.token: str = data["token"]
+        """a continuation token for responding to the interaction"""
+        self.version: int = data["version"]
+        """read-only property, always ``1``"""
+        self.message: Optional[Message] = None
+        """for components, the message they were attached to"""
+
         if data.get("member"):
             self.author = Member(data=data["member"], guild=self.guild, state=self._state)
         else:
             self.author = User(data=data["user"], guild=self.guild, state=self._state)
 
-        self.message: Optional[Message] = None
-        """The message in which the interaction was created"""
         if data.get("message"):
             self.message = Message(data=data["message"], channel=self.channel, state=self._state)
         
