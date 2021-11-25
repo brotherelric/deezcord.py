@@ -703,7 +703,6 @@ class ConnectionState:
         if data['type'] == 3:  # interaction component
             custom_id = interaction.data['custom_id']  # type: ignore
             component_type = interaction.data['component_type']  # type: ignore
-            self._view_store.dispatch(component_type, custom_id, interaction)
 
         self.dispatch('interaction', interaction)
 

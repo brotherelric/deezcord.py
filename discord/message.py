@@ -1277,6 +1277,8 @@ class Message(Hashable):
                     payload['allowed_mentions'] = allowed_mentions.to_dict()
 
         if attachments is not MISSING:
+            if attachments is None:
+                attachments = []
             payload['attachments'] = [a.to_dict() for a in attachments]
 
         if components is not MISSING:
@@ -1287,7 +1289,7 @@ class Message(Hashable):
 
         data = await self._state.http.edit_message(self.channel.id, self.id, **payload)
         message = Message(state=self._state, channel=self.channel, data=data)
-        
+
         if delete_after is not None:
             await self.delete(delay=delete_after)
 
