@@ -47,7 +47,7 @@ from .webhook.async_ import async_context, Webhook, handle_message_parameters
 
 __all__ = (
     'Interaction',
-    'EphemeralMessage'
+    'ResponseMessage'
 )
 
 if TYPE_CHECKING:
@@ -72,15 +72,83 @@ MISSING: Any = utils.MISSING
 
 
 
-class EphemeralMessage(Message):
+class ResponseMessage(Message):
     def __init__(self, *, state: ConnectionState, channel, data, application_id, token):
         super().__init__(state=state, channel=channel, data=data)
         self.application_id = application_id
         self.token = token
-    async def edit(self, content, *,
-        embed=MISSING, embeds=MISSING, suppress=MISSING, allowed_mentions=MISSING, attachments=MISSING, 
-        components=MISSING
+
+    async def edit(
+        self, 
+        content: Optional[str],
+        *,
+        embed: Embed = MISSING, 
+        embeds: List[Embed]=MISSING, 
+        attachments: List[Attachment] = MISSING, 
+        file: File= MISSING, 
+        files: List[File] = MISSING,
+        suppress: bool = MISSING, 
+        delete_after: float = None, 
+        allowed_mentions: AllowedMentions = MISSING, 
+        components: List[Component] = MISSING
     ):
+        """|coro|
+
+        Edits the message.
+
+        The content must be able to be transformed into a string via ``str(content)``.
+
+        Parameters
+        -----------
+        content: Optional[:class:`str`]
+            The new content to replace the message with.
+            Could be ``None`` to remove the content.
+        embed: Optional[:class:`Embed`]
+            The new embed to replace the original with.
+            Could be ``None`` to remove the embed.
+        embeds: List[:class:`Embed`]
+            The new embeds to replace the original with. Must be a maximum of 10.
+            To remove all embeds ``[]`` should be passed.
+        attachments: List[:class:`Attachment`]
+            A list of attachments to keep in the message. If ``[]`` is passed
+            then all attachments are removed.
+        file: :class:`File`
+            The file to upload. If you want to replace the currently uploaded file with this parameter,
+            you have to set ``attachments`` to ``[]``.
+        files: List[:class:`File`]
+            A list of files to send with the content. This cannot be mixed with the
+            ``file`` parameter.
+        suppress: :class:`bool`
+            Whether to suppress embeds for the message. This removes
+            all the embeds if set to ``True``. If set to ``False``
+            this brings the embeds back if they were suppressed.
+            Using this parameter requires :attr:`~.Permissions.manage_messages`.
+        delete_after: :class:`float`
+            If provided, the number of seconds to wait in the background
+            before deleting the message we just edited. If the deletion fails,
+            then it is silently ignored.
+        allowed_mentions: :class:`~discord.AllowedMentions`
+            Controls the mentions being processed in this message. If this is
+            passed, then the object is merged with :attr:`~discord.Client.allowed_mentions`.
+            The merging behaviour only overrides attributes that have been explicitly passed
+            to the object, otherwise it uses the attributes set in :attr:`~discord.Client.allowed_mentions`.
+            If no object is passed at all then the defaults given by :attr:`~discord.Client.allowed_mentions`
+            are used instead.
+        components: List[:class:`~discord.Component`]
+            The new message components to replace the message with.
+            To remove all components ``[]`` should be passed.
+        
+
+        Raises
+        -------
+        HTTPException
+            Editing the message failed.
+        Forbidden
+            Tried to suppress a message without permissions or
+            edited a message's content or embed that isn't yours.
+        ~discord.InvalidArgument
+            You specified both ``embed`` and ``embeds``
+        """
         payload = {}
         if content is not MISSING:
             if content is not None:
@@ -123,10 +191,18 @@ class EphemeralMessage(Message):
             else:
                 payload['components'] = []
 
-        self._update(await self._state.http.request(
-            Route("PATCH", f"/webhooks/{self.application_id}/{self.token}/messages/{self.id}"),
-            json=payload
-        ))
+        if file or files:
+            self._update(await self._state.http.request(
+                Route('PATCH', f'/webhooks/{self.application_id}/{self.token}/messages/{self.id}'),
+                files=files or [file], form=utils.get_form(files or [file], payload)
+            ))
+        else:
+            self._update(await self._state.http.request(
+                Route('PATCH', f'/webhooks/{self.application_id}/{self.token}/messages/{self.id}'),
+                json=payload
+            ))
+        if delete_after is not None:
+            await self.delete(delay=delete_after)
     async def delete(self):
         """Override for delete function that will throw an exception"""
         raise NotImplementedError()
@@ -252,10 +328,10 @@ class Interaction:
     ): ...
 
 
-
-
     async def respond(self, content=None, *, tts=False, embed=None, embeds=None, file=None, files=None,
-    allowed_mentions=None, mention_author=None, components=None, delete_after=None, hidden=False, ninja_mode=False) -> Message:
+        allowed_mentions=None, mention_author=None, components=None, delete_after=None, 
+        hidden=False, ninja_mode=False
+    ) -> ResponseMessage:
         """
         Responds to the interaction
         
@@ -344,17 +420,11 @@ class Interaction:
         self.responded = True
         
         r = await self._state.http.request(Route("GET", f"/webhooks/{self.application_id}/{self.token}/messages/@original"))
-        if hide_message is True:
-            msg = EphemeralMessage(state=self._state, channel=self.channel, data=r, application_id=self.application_id, token=self.token)
-        else:
-            msg = Message(state=self._state, channel=self.channel, data=r)
-        if delete_after is not None:
-            await msg.delete(delete_after)
-        return msg
+        return ResponseMessage(state=self._state, channel=self.channel, data=r, application_id=self.application_id, token=self.token)
     async def send(self, content=None, *, tts=None, embed=None, embeds=None, file=None, files=None,
         allowed_mentions=None, mention_author=None, components=None, delete_after=None, hidden=False,
         force=False
-    ) -> Union[Message, EphemeralMessage]:
+    ) -> ResponseMessage:
         """
         Sends a message to the interaction using a webhook
         
