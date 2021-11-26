@@ -33,7 +33,7 @@ from discord.types.interactions import InteractionData
 
 from . import utils
 from .http import Route
-from .enums import try_enum, InteractionType, InteractionResponseType
+from .enums import ApplicationCommandType, ComponentType, try_enum, InteractionType, InteractionResponseType
 from .errors import InteractionResponded, HTTPException, ClientException, InvalidArgument
 from .channel import PartialMessageable, ChannelType
 
@@ -231,6 +231,13 @@ class Interaction:
         'message',
     )
 
+    def __new__(cls, state, data):
+        if data['type'] == InteractionType.application_command.value:
+            return ApplicationCommandInteraction(state=state, data=data)
+        if data['type'] == InteractionType.component.value:
+            return ComponentInteraction(state=state, data=data)
+        return object.__new__(cls)
+
     def __init__(self, state: ConnectionState, data: InteractionPayload) -> None:
         self._state = state
         
@@ -238,31 +245,31 @@ class Interaction:
         self.responded: bool = False
         self._deferred_hidden: bool = False
  
-        self.id: int = int(data["id"])
+        self.id: int = int(data['id'])
         """id of the interaction"""
-        self.application_id: int = data["application_id"]
+        self.application_id: int = data['application_id']
         """id of the application this interaction is for"""
-        self.type: int = data["type"]
+        self.type: int = InteractionType(data['type'])
         """The type of interaction. See :class:`~InteractionType` for more information"""
-        self.data: InteractionData = data["data"]
+        self.data: InteractionData = data['data']
         """The passed data of the interaction"""
-        self.channel_id: Optional[int] = utils._get_as_snowflake(data, "channel_id")
+        self.channel_id: Optional[int] = utils._get_as_snowflake(data, 'channel_id')
         """id of channel where the interaction was created"""
-        self.guild_id: Optional[int] = utils._get_as_snowflake(data, "guild_id")
+        self.guild_id: Optional[int] = utils._get_as_snowflake(data, 'guild_id')
         """id of guild where the interaction was created"""
         self.author: Optional[Union[Member, User]] = None
         """The user who created the interaction"""
-        self.token: str = data["token"]
+        self.token: str = data['token']
         """a continuation token for responding to the interaction"""
-        self.version: int = data["version"]
+        self.version: int = data['version']
         """read-only property, always ``1``"""
         self.message: Optional[Message] = None
         """for components, the message they were attached to"""
 
-        if data.get("member"):
-            self.author = Member(data=data["member"], guild=self.guild, state=self._state)
+        if data.get('member'):
+            self.author = Member(data=data['member'], guild=self.guild, state=self._state)
         else:
-            self.author = User(data=data["user"], guild=self.guild, state=self._state)
+            self.author = User(data=data['user'], guild=self.guild, state=self._state)
 
         if data.get("message"):
             self.message = Message(data=data["message"], channel=self.channel, state=self._state)
@@ -505,18 +512,34 @@ class Interaction:
         return msg
     
 class ComponentInteraction(Interaction):
+
+    def __new__(cls, state, data):
+        if data['data']['component_type'] == ComponentType.button.value:
+            return ButtonInteraction(state, data)
+        if data['data']['component_type'] == ComponentType.select.value:
+            return SelectInteraction(state, data)
+        return object.__new__(cls)
+
     def __init__(self, state: ConnectionState, data: InteractionPayload):
         super().__init__(state, data)
         self.component: Component = self.message.components.find(custom_id=self.data['custom_id'])
 class ButtonInteraction(ComponentInteraction):
     component: Button
+
+    def __new__(cls, state, data):
+        return object.__new__(cls)
+
 class SelectInteraction(ComponentInteraction):
     component: SelectMenu
+
+    def __new__(cls, state, data):
+        return object.__new__(cls)
+
     def __init__(self, state: ConnectionState, data: InteractionPayload):
         super().__init__(state, data)
-        self.selected_values: List[str] = data['values']
+        self.selected_values: List[str] = data['data']['values']
         self.selected_options: List[SelectOption] = [
-            self.component.options[i] for i, o in enumerate(self.components.options) 
+            self.component.options[i] for i, o in enumerate(self.component.options) 
                 if o.value in self.selected_values
         ]
 
@@ -525,10 +548,26 @@ class ApplicationCommandInteraction(Interaction):
 
     __slots__ = Interaction.__slots__ + ('command',)
 
+    def __new__(cls, state, data):
+        if data['data']['type'] == ApplicationCommandType.chat_input:
+            ...
+        if data['data']['type'] in [ApplicationCommandType.user.value, ApplicationCommandType.message.value]:
+            return ContextCommandInteraction(state, data)
+        return object.__new__(cls)
     def __init__(self, state: ConnectionState, data: InteractionPayload) -> None:
         super().__init__(state, data)
         self.command = self._state._command_store.get_interaction_command(data)
+
+class SlashCommandInteraction(ApplicationCommandInteraction):
+
+    def __new__(cls, state, data):
+        return object.__new__(cls)
+
 class ContextCommandInteraction(ApplicationCommandInteraction):
+
+    def __new__(cls, state, data):
+        return object.__new__(cls)
+
     def __init__(self, state: ConnectionState, data: InteractionPayload):
         super().__init__(state, data)
         self.command = self._state._command_store.get_interaction_command(data)

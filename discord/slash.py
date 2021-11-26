@@ -793,7 +793,21 @@ class CommandStore:
             await self.state.slash_http.delete_global_commands()
         for id in guilds:
             self.state.slash_http.delete_guild_commands(id)
-        
+         
+    def dispatch(self, type, interaction):
+        self.state.dispatch('application_command', interaction)
+        if type == ApplicationCommandType.chat_input.value:
+            self.state.dispatch('slash_command', interaction)
+        if type == ApplicationCommandType.user.value:
+            self.state.dispatch('user_command', interaction)
+        if type == ApplicationCommandType.message.value:
+            self.state.dispatch('message_command', interaction)
+        if interaction.command:
+            asyncio.create_task(
+                interaction.command.callback(interaction), 
+                name=f'discord-ui-slash-dispatch-{interaction.command.id}'
+            )
+
 
     def get_interaction_command(self, data: InteractionPayload):
         command = self._raw_cache.get(data["data"]["id"])
@@ -816,12 +830,6 @@ class CommandStore:
                 except KeyError:
                     return None
         return command
-    def parse_application_command(self, data):
-        self.state.dispatch('application_command', ApplicationCommandInteraction(state=self.state, data=data))
-        if data['data']['type'] == ApplicationCommandType.user.value:
-            self.state.dispatch('user_command', ContextCommandInteraction(state=self.state, data=data))
-        if data['data']['type'] == ApplicationCommandType.message.value:
-            self.state.dispatch('message_command', ContextCommandInteraction(state=self.state, data=data))
     def get_commands(self, *, all=True, guilds=[], **keys):
         guilds = [str(x) for x in guilds]
         commands = {}

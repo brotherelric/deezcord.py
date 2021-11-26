@@ -712,17 +712,17 @@ class ConnectionState:
                     self.dispatch('reaction_clear_emoji', reaction)
 
     def parse_interaction_create(self, data) -> None:
+        interaction = Interaction(state=self, data=data)
         if data['type'] == 3:  # interaction component
-            self.dispatch('component', ComponentInteraction(data=data, state=self))
+            self.dispatch('component', interaction)
             if data['data']['component_type'] == 2:     # button
-                self.dispatch('button', ButtonInteraction(data=data, state=self))
+                self.dispatch('button', interaction)
             elif data['data']['component_type'] == 3:   # select
-                self.dispatch('select', SelectInteraction(data=data, state=self))
+                self.dispatch('select', interaction)
         elif data['type'] == 2: # application command
-            self._command_store.parse_application_command(data)
+            self._command_store.dispatch(data['data']['type'], interaction)
         
-        interaction = Interaction(data=data, state=self)
-        self.dispatch('interaction', interaction)
+        self.dispatch('interaction', Interaction(data=data, state=self))
 
     def parse_presence_update(self, data) -> None:
         guild_id = utils._get_as_snowflake(data, 'guild_id')
