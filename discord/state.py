@@ -53,11 +53,14 @@ from .flags import ApplicationFlags, Intents, MemberCacheFlags
 from .object import Object
 from .invite import Invite
 from .integrations import _integration_factory
-from .interactions import Interaction, ButtonInteraction, SelectInteraction
 from .ui.view import ViewStore, View
 from .stage_instance import StageInstance
 from .threads import Thread, ThreadMember
 from .sticker import GuildSticker
+from .interactions import (
+    Interaction, 
+    ComponentInteraction, ButtonInteraction, SelectInteraction
+)
 
 if TYPE_CHECKING:
     from .abc import PrivateChannel
@@ -700,6 +703,7 @@ class ConnectionState:
 
     def parse_interaction_create(self, data) -> None:
         if data['type'] == 3:  # interaction component
+            self.dispatch('component', ComponentInteraction(data=data, state=self))
             if data['data']['component_type'] == 2:     # button
                 self.dispatch('button', ButtonInteraction(data=data, state=self))
             elif data['data']['component_type'] == 3:   # select
