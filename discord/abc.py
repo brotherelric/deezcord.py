@@ -1592,7 +1592,6 @@ class Messageable:
         """
         return HistoryIterator(self, limit=limit, before=before, after=after, around=around, oldest_first=oldest_first)
 
-
 class Connectable(Protocol):
     """An ABC that details the common operations on a channel that can
     connect to a voice server.

@@ -42,12 +42,15 @@ from .flags import MessageFlags
 from .message import Message, Attachment
 from .object import Object
 from .permissions import Permissions
-from .components import ComponentStore, Component
 from .webhook.async_ import async_context, Webhook, handle_message_parameters
+from .components import ComponentStore, Component, Button, SelectMenu, SelectOption
 
 __all__ = (
     'Interaction',
-    'ResponseMessage'
+    'ResponseMessage',
+    'ComponentInteraction',
+    'ButtonInteraction',
+    'SelectInteraction'
 )
 
 if TYPE_CHECKING:
@@ -279,7 +282,7 @@ class Interaction:
 
     async def defer(self, *, hidden=False):
         """
-        This will acknowledge the interaction. This will show the (*Bot* is thinking...) Dialog
+        This will acknowledge the interaction. This will show the (*Bot* is thinking...) dialog
         .. note::
             
             This function should be used if the bot needs more than 15 seconds to respond
@@ -495,11 +498,23 @@ class Interaction:
         else:
             r = await self._state.http.request(route, json=payload)
 
-        if hidden is True:
-            msg = EphemeralMessage(state=self._state, channel=self._state.get_channel(int(r["channel_id"])), data=r, application_id=self.application_id, token=self.token)
-        else:
-            msg = Message(state=self._state, channel=self.channel, data=r)
+        msg = ResponseMessage(state=self._state, channel=self.channel, data=r, application_id=self.application_id, token=self.token)
         if delete_after is not None:
-            await msg.delete(delete_after)
+            await msg.delete(delay=delete_after)
         return msg
     
+class ComponentInteraction(Interaction):
+    def __init__(self, state: ConnectionState, data: InteractionPayload):
+        super().__init__(state, data)
+        self.component: Component = self.message.components.find(custom_id=self.data['custom_id'])
+class ButtonInteraction(ComponentInteraction):
+    component: Button
+class SelectInteraction(ComponentInteraction):
+    component: SelectMenu
+    def __init__(self, state: ConnectionState, data: InteractionPayload):
+        super().__init__(state, data)
+        self.selected_values: List[str] = data['values']
+        self.selected_options: List[SelectOption] = [
+            self.component.options[i] for i, o in enumerate(self.components.options) 
+                if o.value in self.selected_values
+        ]

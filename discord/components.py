@@ -322,6 +322,8 @@ class ActionRow():
         self.components[self._get_index(key)] = value
     def __delitem__(self, key):
         self.components.pop(self._get_index(key))
+    def __iter__(self):
+        return iter(self.components)
 
     def to_dict(self) -> ComponentPayload:
         return {
@@ -357,14 +359,17 @@ class ComponentStore:
 
     def __init__(self, components=[]):
         self.rows: List[ActionRow] = []
-        if any(isinstance(x, (list, tuple)) for x in components):
-            for i, _ in components:
+
+        if any(isinstance(x, (list, tuple, ActionRow)) for x in components):
+            for i, _ in enumerate(components):
                 if isinstance(components[i], (list, tuple)):
                     self.rows.append(ActionRow(components[i]))
+                elif isinstance(components[i], ActionRow):
+                    self.rows.append(components[i])
                 else:
                     self.rows.append(ActionRow([components[i]]))
         elif isinstance(components, ActionRow):
-            self.add_row(ActionRow)
+            self.add_row(components)
         else:
             row = []
             for i, c in enumerate(components):
@@ -387,12 +392,21 @@ class ComponentStore:
         self.rows[key] = value
     def __delitem__(self, key):
         self.rows.pop(key)
-      
+    def __iter__(self):
+        return iter(self.rows)
+
+
     @classmethod
     def from_dict(cls, data: List[ComponentPayload]):
         return cls([_component_factory(c) for c in data])
     def to_dict(self):
         return [r.to_dict() for r in self.rows]
+
+    def find(self, *, custom_id):
+        for i, _ in enumerate(self.rows):
+            for j, c in enumerate(self.rows[i]):
+                if c.custom_id == custom_id:
+                    return self.rows[i][j]
 
     @overload
     def add_row(self, *components):
@@ -403,7 +417,7 @@ class ComponentStore:
     def add_row(self, *components):
         if isinstance(components, list):
             components = components[0]
-        self.rows.append(list(components))
+        self.rows.append(ActionRow(components))
         return self
     def get_row(self, index) -> ActionRow:
         return self.rows[index]

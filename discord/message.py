@@ -30,6 +30,11 @@ import re
 import io
 from os import PathLike
 from typing import Dict, TYPE_CHECKING, Union, List, Optional, Any, Callable, Tuple, ClassVar, Optional, overload, TypeVar, Type
+try:
+    from typing import Literal
+except:
+    from typing_extensions import Literal
+
 
 from . import utils
 from .reaction import Reaction
@@ -1592,6 +1597,16 @@ class Message(Hashable):
             data['guild_id'] = self.guild.id
 
         return data
+
+    
+    async def wait_for(self, component: Literal["button", "select", "component"], client, by: Member=None, custom_id=None, check: Callable[[Component], bool]=None):
+        return await client.wait_for(
+            component, 
+            check=lambda c: c.message.id == self.id 
+                and (by or c.author).id == c.author.id
+                and (custom_id or c.data['custom_id']) == c.data['custom_id']
+                and (check or (lambda x: True))(c)
+        )
 
 
 class PartialMessage(Hashable):

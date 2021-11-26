@@ -53,7 +53,7 @@ from .flags import ApplicationFlags, Intents, MemberCacheFlags
 from .object import Object
 from .invite import Invite
 from .integrations import _integration_factory
-from .interactions import Interaction
+from .interactions import Interaction, ButtonInteraction, SelectInteraction
 from .ui.view import ViewStore, View
 from .stage_instance import StageInstance
 from .threads import Thread, ThreadMember
@@ -699,11 +699,13 @@ class ConnectionState:
                     self.dispatch('reaction_clear_emoji', reaction)
 
     def parse_interaction_create(self, data) -> None:
-        interaction = Interaction(data=data, state=self)
         if data['type'] == 3:  # interaction component
-            custom_id = interaction.data['custom_id']  # type: ignore
-            component_type = interaction.data['component_type']  # type: ignore
+            if data['data']['component_type'] == 2:     # button
+                self.dispatch('button', ButtonInteraction(data=data, state=self))
+            elif data['data']['component_type'] == 3:   # select
+                self.dispatch('select', SelectInteraction(data=data, state=self))
 
+        interaction = Interaction(data=data, state=self)
         self.dispatch('interaction', interaction)
 
     def parse_presence_update(self, data) -> None:
