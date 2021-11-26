@@ -519,3 +519,47 @@ class SelectInteraction(ComponentInteraction):
             self.component.options[i] for i, o in enumerate(self.components.options) 
                 if o.value in self.selected_values
         ]
+
+
+class ApplicationCommandInteraction(Interaction):
+
+    __slots__ = Interaction.__slots__ + ('command',)
+
+    def __init__(self, state: ConnectionState, data: InteractionPayload) -> None:
+        super().__init__(state, data)
+        self.command = self._state._command_store.get_interaction_command(data)
+class ContextCommandInteraction(ApplicationCommandInteraction):
+    def __init__(self, state: ConnectionState, data: InteractionPayload):
+        super().__init__(state, data)
+        self.command = self._state._command_store.get_interaction_command(data)
+        self.target_id: int = utils._get_as_snowflake(data['data'], 'target_id')
+
+        self.target: Union[Message, Member, User]
+        if data['data']['type'] == 2:       # user command
+            if data['data']['resolved'].get('members'):
+                member = data['data']['resolved']['members'][
+                    data['data']['target_id']
+                ]
+                member['user'] = data['data']['resolved']['users'][
+                    data['data']['target_id']
+                ]
+                self.target = Member(
+                    state=self._state,
+                    data=member,
+                    guild=self.guild
+                )
+            else:
+                self.target = User(
+                    state=self._state, 
+                    data=data['data']['resolved']['users'][
+                        data['data']['target_id']
+                    ]
+                )
+        if data['data']['type'] == 3:   # message command
+            self.target = Message(
+                state=self._state, 
+                channel=self.channel, 
+                data=data['data']['resolved']['messages'][
+                    data['data']['target_id']
+                ]
+            )

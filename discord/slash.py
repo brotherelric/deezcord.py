@@ -1,4 +1,3 @@
-
 """
 The MIT License (MIT)
 
@@ -32,7 +31,7 @@ from .enums import ApplicationCommandType, OptionType, ChannelType
 from .user import User
 from .member import Member
 from .channel import TextChannel
-from .interactions import Interaction
+from .interactions import ContextCommandInteraction, Interaction, ApplicationCommandInteraction
 
 import inspect
 import asyncio
@@ -796,7 +795,7 @@ class CommandStore:
             self.state.slash_http.delete_guild_commands(id)
         
 
-    def parse_application_command(self, data: InteractionPayload):
+    def get_interaction_command(self, data: InteractionPayload):
         command = self._raw_cache.get(data["data"]["id"])
         if command is None:
             return
@@ -816,8 +815,13 @@ class CommandStore:
                     return base_one[data["data"]["options"][0]["options"][0]["name"]]
                 except KeyError:
                     return None
-        self.state.dispatch('application_command', Interaction(state=self.state, data=data))
-        
+        return command
+    def parse_application_command(self, data):
+        self.state.dispatch('application_command', ApplicationCommandInteraction(state=self.state, data=data))
+        if data['data']['type'] == ApplicationCommandType.user.value:
+            self.state.dispatch('user_command', ContextCommandInteraction(state=self.state, data=data))
+        if data['data']['type'] == ApplicationCommandType.message.value:
+            self.state.dispatch('message_command', ContextCommandInteraction(state=self.state, data=data))
     def get_commands(self, *, all=True, guilds=[], **keys):
         guilds = [str(x) for x in guilds]
         commands = {}
