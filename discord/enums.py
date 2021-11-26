@@ -2,6 +2,7 @@
 The MIT License (MIT)
 
 Copyright (c) 2015-present Rapptz
+Copyright (c) 2021-present 404kuso
 
 Permission is hereby granted, free of charge, to any person obtaining a
 copy of this software and associated documentation files (the "Software"),
@@ -54,6 +55,7 @@ __all__ = (
     'StagePrivacyLevel',
     'InteractionType',
     'InteractionResponseType',
+    'OptionType',
     'NSFWLevel',
 )
 
@@ -539,6 +541,23 @@ class InteractionResponseType(Enum):
     deferred_channel_message = 5  # (with source)
     deferred_message_update = 6  # for components
     message_update = 7  # for components
+
+class ApplicationCommandType(Enum):
+    chat_input  = 1
+    user        = 2
+    message     = 3
+
+class OptionType(Enum):
+    subcommand          = 1
+    subcommand_group    = 2
+    string              = 3
+    integer             = 4
+    boolean             = 5
+    member   =   user   = 6
+    channel             = 7
+    role                = 8
+    mentionable         = 9
+    float               = 10
 
 
 

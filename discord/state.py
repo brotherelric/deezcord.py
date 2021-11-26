@@ -2,6 +2,7 @@
 The MIT License (MIT)
 
 Copyright (c) 2015-present Rapptz
+Copyright (c) 2021-present 404kuso
 
 Permission is hereby granted, free of charge, to any person obtaining a
 copy of this software and associated documentation files (the "Software"),
@@ -35,6 +36,8 @@ import inspect
 
 import os
 
+from discord.http import SlashHTTPClient
+
 from .guild import Guild
 from .activity import BaseActivity
 from .user import User, ClientUser
@@ -54,6 +57,7 @@ from .object import Object
 from .invite import Invite
 from .integrations import _integration_factory
 from .ui.view import ViewStore, View
+from .slash import CommandStore, ApplicationCommand
 from .stage_instance import StageInstance
 from .threads import Thread, ThreadMember
 from .sticker import GuildSticker
@@ -160,6 +164,7 @@ class ConnectionState:
     ) -> None:
         self.loop: asyncio.AbstractEventLoop = loop
         self.http: HTTPClient = http
+        self.slash_http: SlashHTTPClient = SlashHTTPClient(self)
         self.max_messages: Optional[int] = options.get('max_messages', 1000)
         if self.max_messages is not None and self.max_messages <= 0:
             self.max_messages = 1000
@@ -238,7 +243,7 @@ class ConnectionState:
 
         self.clear()
 
-    def clear(self, *, views: bool = True) -> None:
+    def clear(self, *, views: bool = True, commands: bool = True) -> None:
         self.user: Optional[ClientUser] = None
         # Originally, this code used WeakValueDictionary to maintain references to the
         # global user mapping.
@@ -258,6 +263,8 @@ class ConnectionState:
         self._guilds: Dict[int, Guild] = {}
         if views:
             self._view_store: ViewStore = ViewStore(self)
+        if commands:
+            self._command_store: CommandStore = CommandStore(self)
 
         self._voice_clients: Dict[int, VoiceProtocol] = {}
 
@@ -364,6 +371,9 @@ class ConnectionState:
 
     def store_view(self, view: View, message_id: Optional[int] = None) -> None:
         self._view_store.add_view(view, message_id)
+
+    def store_command(self, command: ApplicationCommand):
+        self._command_store.add_command(command)
 
     def prevent_view_updates_for(self, message_id: int) -> Optional[View]:
         return self._view_store.remove_message_tracking(message_id)
@@ -708,7 +718,9 @@ class ConnectionState:
                 self.dispatch('button', ButtonInteraction(data=data, state=self))
             elif data['data']['component_type'] == 3:   # select
                 self.dispatch('select', SelectInteraction(data=data, state=self))
-
+        elif data['type'] == 2: # application command
+            self._command_store.parse_application_command(data)
+        
         interaction = Interaction(data=data, state=self)
         self.dispatch('interaction', interaction)
 
