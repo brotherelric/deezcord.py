@@ -373,7 +373,7 @@ class ConnectionState:
         self._view_store.add_view(view, message_id)
 
     def store_command(self, command: ApplicationCommand):
-        self._command_store.add_command(command)
+        return self._command_store.add_command(command)
 
     def prevent_view_updates_for(self, message_id: int) -> Optional[View]:
         return self._view_store.remove_message_tracking(message_id)

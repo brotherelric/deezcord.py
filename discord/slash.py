@@ -245,6 +245,9 @@ class ApplicationCommand:
         ...
 
 class ChatInputCommand(ApplicationCommand):
+
+    __slots__ = ApplicationCommand.__slots__
+
     def __init__(
         self, 
         name: str=MISSING, 
@@ -268,6 +271,9 @@ class ChatInputCommand(ApplicationCommand):
             state=state
         )  
 class SlashCommand(ChatInputCommand):
+
+    __slots__ = ChatInputCommand.__slots__
+
     def __getitem__(self, name) -> SubSlashCommand:
         return self.__subcommands__[name]
     def __setitem__(self, name, value):
@@ -368,6 +374,9 @@ class ContextCommand(ApplicationCommand):
         }
       
 class MessageCommand(ContextCommand):
+
+    __slots__ = ContextCommand.__slots__
+
     def __init__(self, name, callback=None, guild_ids=None, default_permission=True, guild_permissions={}, state=None):
         ContextCommand.__init__(self,
             ApplicationCommandType.message, 
@@ -379,6 +388,9 @@ class MessageCommand(ContextCommand):
             state=state
         )
 class UserCommand(ContextCommand):
+
+    __slots__ = ContextCommand.__slots__
+
     def __init__(self, name, callback=None, guild_ids=None, default_permission=True, guild_permissions={}, state=None):
         ContextCommand.__init__(self,
             ApplicationCommandType.user, 
@@ -392,6 +404,8 @@ class UserCommand(ContextCommand):
 
 
 class CommandStore:
+    __slots__: Tuple[str, ...] = ('api', 'state', '_cache', '_raw_cache', '_on_sync')
+    
     def __init__(self, state, commands = []) -> None:
         self.api = APITools(state)
         self.state: ConnectionState = state
@@ -401,6 +415,10 @@ class CommandStore:
         self.clear()
         # loads the commands into the cache
         self.load(commands)
+
+        async def on_sync():
+            ...
+        self._on_sync: Callable[[], Coroutine[Any, Any, Any]] = on_sync
     def __repr__(self):
         return f"<{self.__class__.__name__}{self._cache}>"
     def __getitem__(self, index) -> Dict[str, Union[ ApplicationCommand, Dict[str, Union[ ApplicationCommand, Dict[str, Union[ ApplicationCommand, dict ]] ]] ]]:
@@ -540,11 +558,9 @@ class CommandStore:
         return False
     
     def add_command(self, command):
-        self.append(command)
+        return self.append(command)
     
 
-    async def _on_sync(self):
-        ...
     def on_sync(self, method):
         """Decorator for a method that should be called when the commands were synced
         
@@ -574,7 +590,7 @@ class CommandStore:
         :class:`CommandCache`:
             The own instance with the commands loaded into it
         """
-    ...
+        ...
     @overload
     def load(self, cache: Union[CommandStore, dict]) -> CommandStore:
         """Replaces the own raw cache with the passed cache
@@ -591,12 +607,12 @@ class CommandStore:
         ...
     # endregion
     def load(self, cache):
-        # application commands
+        # first overload, application commands
         if isinstance(cache, list):
             for x in cache:
                 self._add(x)
             return self
-        # raw cache
+        # second overloadd, raw cache
         self._cache = cache
         return self
     def clear(self):
@@ -610,8 +626,10 @@ class CommandStore:
         }
         return self
     def copy(self):
-        return self.__class__(self._client).load(self._cache)
+        return self.__class__(self.state).load(self._cache)
     def _add(self, command: ApplicationCommand):
+        if command._state is None:
+            command._state = self.state
         type_key = str(command.type)
         if command.is_global():
             if command.is_subcommand():
@@ -691,6 +709,7 @@ class CommandStore:
         http = self.state.slash_http
         self._raw_cache = {}
         
+
         for ct in self["globals"]:
             for base_name in self["globals"][ct]:
                 base = self["globals"][ct][base_name]
@@ -705,7 +724,7 @@ class CommandStore:
                 base.id = new_command["id"] if new_command else api_command["id"]
                 self._raw_cache[base.id] = base
 
-        # self["!globals"] returns a copy of a filtered dict but since we will be only using the 
+        # self["!globals"] returns a copy of a filtered dict but since we will be only using the
         # copy's key and acces the original self dict, there won't be any problems
         # 
         # for each guild
@@ -878,6 +897,7 @@ class CommandStore:
 
     
 class APITools():
+    __slots__: Tuple[str, ...] = ('state',)
     def __init__(self, state) -> None:
         self.state: ConnectionState = state
 
@@ -891,7 +911,7 @@ class APITools():
                 return x
     async def get_all_guild_commands(self):
         commands = []
-        async for x in self._discord.fetch_guilds():
+        async for x in [x.id for x in self.state.guilds]:
             try:
                 commands += await self.state.slash_http.get_guild_commands(x.id)
             except Forbidden:
@@ -908,6 +928,7 @@ class APITools():
                 return x
 
 class SlashPermission:
+    __slots__ = ('allowed', 'forbidden')
     def __init__(self, *, allowed: Dict[int, int]={}, forbidden: Dict[int, int]={}) -> None:
         """
         
