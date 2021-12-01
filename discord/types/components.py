@@ -74,4 +74,16 @@ class SelectMenu(_SelectMenuOptional):
     options: List[SelectOption]
 
 
+class _InputRowOptional(TypedDict, total=False):
+    placeholder: str
+    min_length: int
+    max_length: int
+
+class InputRow(_InputRowOptional):
+    type: Literal[4]
+    style: Union[Literal[1], Literal[2]]
+    custom_id: str
+    label: str
+
+
 Component = Union[ActionRow, ButtonComponent, SelectMenu]

@@ -62,7 +62,7 @@ class UI:
 
     def command(
         self,
-        name: str,
+        name: str = MISSING,
         description: str = MISSING,
         options: List[SlashOption] = None,
         guild_ids: List[int] = None,
@@ -85,7 +85,7 @@ class UI:
     def subcommand(
         self,
         base_names: List[str],
-        name: str,
+        name: str = MISSING,
         description: str = MISSING,
         options: List[SlashOption] = None,
         guild_ids: List[int] = None,
@@ -94,6 +94,7 @@ class UI:
     ):
         def decorator(callback: Callable[Concatenate[InteractionT, P], Coro[T]]):
             return self.add_command(SubSlashCommand(
+                None,
                 base_names=base_names,
                 name=name,
                 callback=callback,

@@ -310,6 +310,7 @@ class SubSlashCommand(ChatInputCommand):
     __slots__ = ChatInputCommand.__slots__ + (
         'base',
         'group_name',
+        'base_names'
     )
     
     def __init__(

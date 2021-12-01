@@ -523,6 +523,7 @@ class ComponentInteraction(Interaction):
     def __init__(self, state: ConnectionState, data: InteractionPayload):
         super().__init__(state, data)
         self.component: Component = self.message.components.find(custom_id=self.data['custom_id'])
+    
 class ButtonInteraction(ComponentInteraction):
     component: Button
 
@@ -557,6 +558,89 @@ class ApplicationCommandInteraction(Interaction):
     def __init__(self, state: ConnectionState, data: InteractionPayload) -> None:
         super().__init__(state, data)
         self.command = self._state._command_store.get_interaction_command(data)
+    async def respond(self, content=None, *, tts=False, embed=None, embeds=None, file=None, files=None,
+        allowed_mentions=None, mention_author=None, components=None, delete_after=None, 
+        hidden=False, form=None
+    ) -> ResponseMessage:
+        """
+        Responds to the interaction
+        
+        Parameters
+        ----------
+        content: :class:`str`, optional
+            The raw message content
+        tts: :class:`bool`
+            Whether the message should be send with text-to-speech
+        embed: :class:`discord.Embed`
+            Embed rich content
+        embeds: List[:class:`discord.Embed`]
+            A list of embeds for the message
+        file: :class:`discord.File`
+            The file which will be attached to the message
+        files: List[:class:`discord.File`]
+            A list of files which will be attached to the message
+        nonce: :class:`int`
+            The nonce to use for sending this message
+        allowed_mentions: :class:`discord.AllowedMentions`
+            Controls the mentions being processed in this message
+        mention_author: :class:`bool`
+            Whether the author should be mentioned
+        components: List[:class:`~Button` | :class:`~LinkButton` | :class:`~SelectMenu`]
+            A list of message components to be included
+        delete_after: :class:`float`
+            After how many seconds the message should be deleted, only works for non-hiddend messages; default MISSING
+        listener: :class:`Listener`
+            A component-listener for this message
+        hidden: :class:`bool`
+            Whether the response should be visible only to the user 
+        
+        Returns
+        -------
+        :class:`~Message` | :class:`~EphemeralMessage`
+            Returns the sent message
+        """
+        if self.responded is True:
+            return await self.send(content=content, tts=tts, embed=embed, embeds=embeds, 
+                allowed_mentions=allowed_mentions, mention_author=mention_author, 
+                components=components, hidden=hidden
+            )
+
+        if form is not None:
+            await self._state.http.respond_to(self.id, self.token, InteractionResponseType.modal, data=form.to_dict())
+            return
+
+        payload = {"tts": tts}
+        if content is not None:
+            payload["content"] = str(content)
+        if embed is not None or embeds is not None:
+            payload["embed"] = embeds or [embed] 
+        if allowed_mentions is not None:
+            payload["alllowed_mentions"] = allowed_mentions.to_dict()
+        if mention_author is not None:
+            allowed_mentions = payload["allowed_mentions"] if "allowed_mentions" in payload else AllowedMentions().to_dict()
+            allowed_mentions['replied_user'] = mention_author
+            payload["allowed_mentions"] = allowed_mentions
+        if components is not None:
+            payload["components"] = ComponentStore(components).to_dict()
+            
+        
+        hide_message = self._deferred_hidden or not self.deferred and hidden is True
+
+        if hide_message:
+            payload["flags"] = 64
+        
+        if self.deferred:
+            route = Route("PATCH", f'/webhooks/{self.application_id}/{self.token}/messages/@original')
+            if file is not None or files is not None:
+                await self._state.http.request(route=route, files=files or [file], form=utils.get_form(files or [file], payload))
+            else:
+                await self._state.http.request(route, json=payload)    
+        else:
+            await self._state.http.respond_to(self.id, self.token, InteractionResponseType.channel_message, payload, files=files or [file] if file is not None else None)
+        self.responded = True
+        
+        r = await self._state.http.request(Route("GET", f"/webhooks/{self.application_id}/{self.token}/messages/@original"))
+        return ResponseMessage(state=self._state, channel=self.channel, data=r, application_id=self.application_id, token=self.token)
 
 class SlashCommandInteraction(ApplicationCommandInteraction):
 

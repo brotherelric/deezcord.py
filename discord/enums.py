@@ -540,7 +540,8 @@ class InteractionResponseType(Enum):
     channel_message = 4  # (with source)
     deferred_channel_message = 5  # (with source)
     deferred_message_update = 6  # for components
-    message_update = 7  # for components
+    message_update = 7  # for components,
+    modal = 9
 
 class ApplicationCommandType(Enum):
     chat_input  = 1
@@ -573,6 +574,7 @@ class ComponentType(Enum):
     action_row = 1
     button = 2
     select = 3
+    input_text = 4
 
     def __int__(self):
         return self.value
@@ -596,6 +598,11 @@ class ButtonStyle(Enum):
     def __int__(self):
         return self.value
 
+class TextStyleType(Enum):
+    short = 1
+    """Intended for short single-line text."""
+    paragraph = 2
+    """Intended for much longer inputs."""
 
 class StagePrivacyLevel(Enum):
     public = 1

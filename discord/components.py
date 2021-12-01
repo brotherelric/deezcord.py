@@ -29,7 +29,7 @@ from typing import Any, ClassVar, Dict, List, Optional, TYPE_CHECKING, Tuple, Ty
 from string import printable
 from random import choice
 
-from .enums import get_enum, ComponentType, ButtonStyle
+from .enums import TextStyleType, get_enum, ComponentType, ButtonStyle
 from .utils import get_slots, MISSING, All
 from .partial_emoji import PartialEmoji, _EmojiTag
 
@@ -40,6 +40,7 @@ if TYPE_CHECKING:
         SelectMenu as SelectMenuPayload,
         SelectOption as SelectOptionPayload,
         ActionRow as ActionRowPayload,
+        InputRow as InputRowPayload
     )
     from .emoji import Emoji
 
@@ -51,6 +52,8 @@ __all__ = (
     'LinkButton',
     'SelectMenu',
     'SelectOption',
+    'Form',
+    'InputRow',
 )
 
 C = TypeVar('C', bound='Component')
@@ -225,7 +228,6 @@ class SelectMenu(Component):
             disabled=data.get("disabled", False)
         )
 
-
 class SelectOption:
     __slots__: Tuple[str, ...] = (
         'label',
@@ -300,10 +302,63 @@ class SelectOption:
 
         return payload
 
-component = Union[Button, LinkButton, SelectMenu]
 
-class ActionRow():
+class InputRow(Component):
+    __slots__ = ('label', 'style', 'custom_id', 'placeholder', 'min_length', 'max_length')
+    def __init__(
+        self, 
+        label: str, 
+        style:TextStyleType=TextStyleType.short, 
+        custom_id: str=MISSING, 
+        placeholder: str=None, 
+        min_length: int=None, 
+        max_length: int=None
+    ):
+        self.type = ComponentType.input_text
+        self.style = style
+        self.custom_id = custom_id or ''.join([choice(printable) for _ in range(20)])
+        self.label = label
+        self.placeholder = placeholder
+        self.min_length = min_length
+        self.max_length = max_length
+    def to_dict(self) -> InputRowPayload:
+        payload = {
+            "type": self.type.value,
+            "label": self.label,
+            "style": self.style.value,
+            "custom_id": self.custom_id
+        }
+        if self.placeholder is not None:
+            payload["placehilder"] = self.placeholder
+        if self.min_length is not None:
+            payload["min_length"] = self.min_length
+        if self.max_length is not None:
+            payload["max_length"] = self.max_length
+        return payload
+class Form(Component):
+    __slots__: Tuple[str, ...] = ('title', 'inputs', 'custom_id')
+    def __init__(
+        self,
+        title: str,
+        inputs: List[InputRow],
+        custom_id: str = MISSING
+    ):
+        self.title = title
+        self.inputs: List[InputRow] = inputs
+        self.custom_id = custom_id or ''.join([choice(printable) for _ in range(20)])
 
+    def to_dict(self):
+        return {
+            "custom_id": self.custom_id,
+            "title": self.title,
+            "components": [ActionRow([inp]).to_dict() for inp in self.inputs]
+        }
+
+
+
+component = Union[Button, LinkButton, SelectMenu, InputRow]
+
+class ActionRow:
     def __repr__(self):
         return f"<{self.__class__.__name__} {self.components!r}>"
 

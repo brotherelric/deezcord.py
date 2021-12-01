@@ -229,7 +229,7 @@ class SlashHTTPClient:
                 raise ex
     async def update_command_permissions(self, guild_id, command_id, permissions):
         async with aiohttp.ClientSession() as client:
-            async with client.put(f"https://discord.com/api/v9/applications/{self.state.application_id}/guilds/{guild_id}/commands/{command_id}/permissions",
+            async with client.put(f"{Route.BASE}/applications/{self.state.application_id}/guilds/{guild_id}/commands/{command_id}/permissions",
                 headers={"Authorization": "Bot " + self.state.http.token}, json={"permissions": permissions}) as response:
                 if response.status == 200:
                     return await response.json()
