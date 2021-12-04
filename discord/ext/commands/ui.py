@@ -50,7 +50,6 @@ class UI:
         @self.client.listen()
         async def on_ready():
             self.client._connection._command_store.load(self._temp_commands)
-            del self._temp_commands
 
     def add_command(self, command: T) -> T:
         if not self.client.is_ready():
@@ -94,7 +93,7 @@ class UI:
     ):
         def decorator(callback: Callable[Concatenate[InteractionT, P], Coro[T]]):
             return self.add_command(SubSlashCommand(
-                None,
+                base=None,
                 base_names=base_names,
                 name=name,
                 callback=callback,
@@ -125,7 +124,7 @@ class UI:
             ))
         return decorator
 
-    def message_command(
+    def user_command(
         self,
         name: str,
         guild_ids: List[int] = None,

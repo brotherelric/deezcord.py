@@ -28,12 +28,9 @@ DEALINGS IN THE SOFTWARE.
 from __future__ import annotations
 from typing import Any, Dict, List, Optional, TYPE_CHECKING, Tuple, Union, overload
 
-from discord.types.interactions import InteractionData
-
-
 from . import utils
 from .http import Route
-from .enums import ApplicationCommandType, ComponentType, try_enum, InteractionType, InteractionResponseType
+from .enums import ApplicationCommandType, ComponentType, OptionType, try_enum, InteractionType, InteractionResponseType
 from .errors import InteractionResponded, HTTPException, ClientException, InvalidArgument
 from .channel import PartialMessageable, ChannelType
 
@@ -45,6 +42,7 @@ from .object import Object
 from .permissions import Permissions
 from .webhook.async_ import async_context, Webhook, handle_message_parameters
 from .components import ComponentStore, Component, Button, SelectMenu, SelectOption
+from .abc import GuildChannel
 
 __all__ = (
     'Interaction',
@@ -76,7 +74,7 @@ MISSING: Any = utils.MISSING
 
 class ResponseMessage(Message):
 
-    __slots__ = Message.__slots__ + ('application_id', 'token',)
+    __slots__ = ('application_id', 'token',)
 
     def __init__(self, *, state: ConnectionState, channel, data, application_id, token):
         super().__init__(state=state, channel=channel, data=data)
@@ -228,7 +226,6 @@ class Interaction:
         'channel_id',
         'guild_id',
         'author',
-        'message',
     )
 
     def __new__(cls, state, data):
@@ -263,16 +260,12 @@ class Interaction:
         """a continuation token for responding to the interaction"""
         self.version: int = data['version']
         """read-only property, always ``1``"""
-        self.message: Optional[Message] = None
-        """for components, the message they were attached to"""
-
+        
         if data.get('member'):
             self.author = Member(data=data['member'], guild=self.guild, state=self._state)
         else:
             self.author = User(data=data['user'], guild=self.guild, state=self._state)
 
-        if data.get("message"):
-            self.message = Message(data=data["message"], channel=self.channel, state=self._state)
         
     @property
     def created_at(self):
@@ -512,6 +505,10 @@ class Interaction:
         return msg
     
 class ComponentInteraction(Interaction):
+    __slots__ = (
+        'component',
+        'message',
+    )
 
     def __new__(cls, state, data):
         if data['data']['component_type'] == ComponentType.button.value:
@@ -523,9 +520,16 @@ class ComponentInteraction(Interaction):
     def __init__(self, state: ConnectionState, data: InteractionPayload):
         super().__init__(state, data)
         self.component: Component = self.message.components.find(custom_id=self.data['custom_id'])
+        """the component that created the interaction"""
+        self.message: Optional[Message] = None
+        """for components, the message they were attached to"""
+        if data.get("message"):
+            self.message = Message(data=data["message"], channel=self.channel, state=self._state)
     
 class ButtonInteraction(ComponentInteraction):
     component: Button
+
+    __slots__ = ComponentInteraction.__slots__
 
     def __new__(cls, state, data):
         return object.__new__(cls)
@@ -533,6 +537,8 @@ class ButtonInteraction(ComponentInteraction):
 class SelectInteraction(ComponentInteraction):
     component: SelectMenu
 
+    __slots__ = ComponentInteraction.__slots__
+    
     def __new__(cls, state, data):
         return object.__new__(cls)
 
@@ -547,17 +553,18 @@ class SelectInteraction(ComponentInteraction):
 
 class ApplicationCommandInteraction(Interaction):
 
-    __slots__ = Interaction.__slots__ + ('command',)
+    __slots__ = ('command',)
 
     def __new__(cls, state, data):
-        if data['data']['type'] == ApplicationCommandType.chat_input:
-            ...
+        if data['data']['type'] == ApplicationCommandType.chat_input.value:
+            return SlashCommandInteraction(state, data)
         if data['data']['type'] in [ApplicationCommandType.user.value, ApplicationCommandType.message.value]:
             return ContextCommandInteraction(state, data)
         return object.__new__(cls)
     def __init__(self, state: ConnectionState, data: InteractionPayload) -> None:
         super().__init__(state, data)
         self.command = self._state._command_store.get_interaction_command(data)
+
     async def respond(self, content=None, *, tts=False, embed=None, embeds=None, file=None, files=None,
         allowed_mentions=None, mention_author=None, components=None, delete_after=None, 
         hidden=False, form=None
@@ -643,12 +650,53 @@ class ApplicationCommandInteraction(Interaction):
         return ResponseMessage(state=self._state, channel=self.channel, data=r, application_id=self.application_id, token=self.token)
 
 class SlashCommandInteraction(ApplicationCommandInteraction):
+    __slots__ = ('options',)
 
     def __new__(cls, state, data):
         return object.__new__(cls)
+    def __init__(self, state, data):
+        super().__init__(state, data)
+        self.options: Dict[str, str] = {}
+        print(self.data)
+        if len(self.data['options']) > 0:
+            if self.data['options'][0] == OptionType.subcommand.value:
+                self.options = self.data['options'][0].get('options', {})
+            elif self.data['options'][0] == OptionType.subcommand_group.value:
+                self.options = self.data['options'][0]['options'][0]
+            else:
+                for op in self.data['options']:
+                    type = OptionType(op['type'])
+                    value = op['value']
+                    name = op['name']
+                    if type is OptionType.string:
+                        return str(op['value'])
+                    if type is OptionType.integer:
+                        return int(op['value'])
+                    if type is OptionType.boolean:
+                        return bool(op['value'])
+                    if type is OptionType.member:
+                        if self.data['resolved'].get('members'):
+                            member = self.data['resolved']['members'][value]
+                            member['user'] = self.data['resolved']['users'][value]
+                            return Member(data=member, guild=self.guild, state=self._state)
+                        else:
+                            return User(data=self.data['resolved']['users'][value], state=self._state)
+                    if type is OptionType.channel:
+                        return GuildChannel(
+                            data=self.data['resolved']['channels'][value], 
+                            guild=self.guild, state=self._state
+                        )
+                        # you can't select channels in DM commands, it will say invalid channel_id
+                    if type is OptionType.role:
+                        ...
+                    if type is OptionType.float:
+                        ...
 
 class ContextCommandInteraction(ApplicationCommandInteraction):
-
+    __slots__ = (
+        'target_id',
+        'target'
+    )
     def __new__(cls, state, data):
         return object.__new__(cls)
 

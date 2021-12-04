@@ -104,6 +104,9 @@ class _MissingSentinel:
     def __repr__(self):
         return '...'
 
+    def __len__(self):
+        return 0
+
 
 MISSING: Any = _MissingSentinel()
 

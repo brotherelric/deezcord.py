@@ -31,7 +31,6 @@ from .enums import ApplicationCommandType, OptionType, ChannelType
 from .user import User
 from .member import Member
 from .channel import TextChannel
-from .interactions import ContextCommandInteraction, Interaction, ApplicationCommandInteraction
 
 import inspect
 import asyncio
@@ -42,8 +41,9 @@ if TYPE_CHECKING:
     from .state import ConnectionState
     from .types.interactions import (
         Interaction as InteractionPayload,
-        ApplicationCommandInteractionData as ApplicationCommandPayload
-    ) 
+        ApplicationCommandInteractionData as ApplicationCommandPayload,
+        ApplicationCommandOption as SlashOptionPayload 
+    )
     C = TypeVar("C", bound="ApplicationCommand")
 
 __all__ = (
@@ -110,7 +110,8 @@ class SlashOption:
         'autocomplete'
     )
 
-    def __init__(self, 
+    def __init__(
+        self, 
         type: OptionType, 
         name: str,
         description: str=MISSING, 
@@ -141,6 +142,20 @@ class SlashOption:
             self.channel_types = self.type.__types__
         if hasattr(self.type, '__range__'):
             self.min_value, self.max_value = self.type.__range__
+
+    def __eq__(self, o: Union[SlashOption, SlashOptionPayload]):
+        if isinstance(o, dict):
+            return (
+                o['type'] == self.type.value
+                and o['name'] == self.name
+                and o['description'] == self.description
+                and o.get('required', False) == self.required
+                and o.get('choices') == self.choices
+                and o.get('min_value') == self.min_value
+                and o.get('max_value') == self.max_value
+                and len(o.get('channel_types', [])) == len(self.channel_types or [])
+                    and set(o.get('channel_types', [])) == set(self.channel_types or [])
+            )
 
     def to_dict(self):
         payload = {
@@ -173,6 +188,8 @@ class ApplicationCommand:
         '__original_name__',
         
         '_state',
+        'cog',      # for cog commands
+
         'type',
         'id',
         'callback',
@@ -198,10 +215,12 @@ class ApplicationCommand:
         state=None
     ):
         self.__aliases__: List[str] = getattr(callback, '__aliases__', None)
-        self.__subcommands__ = {}
+        self.__subcommands__: Dict[str, Union[SubSlashCommand, Dict[str, SubSlashCommand]]] = {}
         self.__original_name__: str = name
 
         self._state: ConnectionState = state
+        self.cog = None     # set later in cog commands
+
         self.type: ApplicationCommandType = type
         self.id: int = None     # set later
 
@@ -217,7 +236,10 @@ class ApplicationCommand:
         self.default_permission: bool = default_permission
         self.guild_permissions: dict = guild_permissions
         self.permissions: SlashPermission = SlashPermission()
-
+    async def __call__(self, *args, **kwargs):
+        if self.cog is not None:
+            return await self.callback(self.cog, *args, **kwargs)
+        return await self.callback(*args, **kwargs)
 
     def to_dict(self) -> ApplicationCommandPayload:
         payload = {
@@ -236,7 +258,7 @@ class ApplicationCommand:
     def has_aliases(self) -> bool:
         return self.__aliases__ and len(self.__aliases__) > 0
     def is_subcommand(self) -> bool:
-        return hasattr(self, 'base') and hasattr(self, 'base_names')
+        return hasattr(self, 'base')
 
     async def edit(self, guild_id, **fields):
         ...
@@ -259,8 +281,9 @@ class ChatInputCommand(ApplicationCommand):
         guild_permissions: dict={},
         state: ConnectionState=None
     ):
-        ApplicationCommand.__init__(self,
-            ApplicationCommandType.chat_input, 
+        ApplicationCommand.__init__(
+            self,
+            type=ApplicationCommandType.chat_input, 
             callback=callback, 
             name=name, 
             description=description, 
@@ -280,13 +303,34 @@ class SlashCommand(ChatInputCommand):
         self.__subcommands__[name] = value
     def __delitem__(self, name):
         del self.__subcommands__[name]
+    def __eq__(self, object: Union[ApplicationCommand, ApplicationCommandPayload]):
+        if isinstance(object, dict):
+            return (
+                object['type'] == self.type.value
+                and object['name'] == self.name
+                and len(self.options) == len(object['options'])
+                    and all(object['options'][i] == self.options[i] for i, _ in enumerate(self.options))
+            )
+        if isinstance(object, ApplicationCommand):
+            ...
+        return False
     
     def to_dict(self) -> ApplicationCommandPayload:
         payload = super().to_dict()
         
         # this will replace the options with the subcommands converted to a dict
         if self.has_subcommands():
-            payload['options'] = [sub.to_dict() for sub in self.__subcommands__]
+            payload['options'] = [
+                self.__subcommands__[sub].to_dict() 
+                    if not isinstance(self.__subcommands__[sub], dict) else
+                (
+                    SlashOption(OptionType.subcommand_group, name=sub,
+                        options=[
+                            self.__subcommands__[sub][x].to_option() for x in self.__subcommands__[sub]
+                        ]).to_dict()
+                )
+                    for sub in self.__subcommands__
+            ]
         
         return payload
 
@@ -305,6 +349,10 @@ class SlashCommand(ChatInputCommand):
     @property
     def subcommands(self):
         return self.__subcommands__
+class _TempBase:
+    __slots__ = ('name',)
+    def __init__(self, name):
+        self.name: str = name
 class SubSlashCommand(ChatInputCommand):
     
     __slots__ = ChatInputCommand.__slots__ + (
@@ -316,7 +364,7 @@ class SubSlashCommand(ChatInputCommand):
     def __init__(
         self, 
         base: SlashCommand,
-        base_names: Union[List[str], str],
+        base_names: Union[List[str], str]=MISSING,
         callback: Callable[..., Coroutine[Any, Any, Any]]=None,
         name: str=MISSING,
         description: str=MISSING,
@@ -326,8 +374,8 @@ class SubSlashCommand(ChatInputCommand):
         guild_permissions: dict = {},
         state: ConnectionState = None
     ):
-        self.base = base
-        self.base_names = base_names
+        self.base = base or _TempBase(base_names[0])
+        self.group_name = base_names[1] if len(base_names) > 1 else None
         ChatInputCommand.__init__(self,
             name=name, 
             callback=callback, 
@@ -338,6 +386,9 @@ class SubSlashCommand(ChatInputCommand):
             guild_permissions=guild_permissions, 
             state=state
         )
+
+    def to_option(self) -> SlashOption:
+        return SlashOption(OptionType.subcommand, self.name, self.description, False)
 
     @property
     def base_name(self):
@@ -636,7 +687,7 @@ class CommandStore:
             if command.is_subcommand():
                 base = self["globals"][type_key].get(command.base_names[0])
                 if base is None:
-                    base = SlashCommand(None, command.base_names[0], 
+                    base = SlashCommand(name=command.base_names[0], callback=None,
                         guild_permissions=command.guild_permissions, default_permission=command.default_permission
                     )
                 base.add_subcommand(command)
@@ -652,9 +703,9 @@ class CommandStore:
                     self[guild][type_key] = {}
                 if command.is_subcommand():
                     # is subcommand
-                    base = self[guild][type_key].get(command.base_names[0])
+                    base = self[guild][type_key].get(command.base_name)
                     if base is None:
-                        base = SlashCommand(None, command.base_names[0],
+                        base = SlashCommand(callback=None, name=command.base_name,
                             guild_permissions=command.guild_permissions, default_permission=command.default_permission
                         )
                     base.add_subcommand(command)
@@ -715,7 +766,8 @@ class CommandStore:
             for base_name in self["globals"][ct]:
                 base = self["globals"][ct][base_name]
                 new_command = None # variable to store the new command data
-                api_command = await self.api.get_global_command(base.name, base._json["type"])
+                api_command = await self.api.get_global_command(base.name, base.type.value)
+                print(api_command == base)
                 if api_command is None:
                     new_command = await http.create_global_command(base.to_dict())
                 else:
@@ -817,14 +869,20 @@ class CommandStore:
     def dispatch(self, type, interaction):
         self.state.dispatch('application_command', interaction)
         if type == ApplicationCommandType.chat_input.value:
-            self.state.dispatch('slash_command', interaction)
+            self.state.dispatch('slash_command', interaction, **interaction.options)
         if type == ApplicationCommandType.user.value:
-            self.state.dispatch('user_command', interaction)
+            self.state.dispatch('user_command', interaction, interaction.target)
         if type == ApplicationCommandType.message.value:
-            self.state.dispatch('message_command', interaction)
+            self.state.dispatch('message_command', interaction, interaction.target)
         if interaction.command:
+            if type == ApplicationCommandType.chat_input.value:
+                promise = interaction.command(interaction, **interaction.options)
+            elif type in [ApplicationCommandType.message.value, ApplicationCommandType.user.value]:
+                promise = interaction.command(interaction, interaction.target)
+            else:
+                promise = interaction.command(interaction)
             asyncio.create_task(
-                interaction.command.callback(interaction), 
+                promise, 
                 name=f'discord-ui-slash-dispatch-{interaction.command.id}'
             )
 
