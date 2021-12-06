@@ -25,6 +25,7 @@ DEALINGS IN THE SOFTWARE.
 
 from __future__ import annotations
 
+
 from .utils import All, MISSING
 from .errors import Forbidden, InvalidArgument
 from .enums import ApplicationCommandType, OptionType, ChannelType
@@ -34,15 +35,16 @@ from .channel import TextChannel
 
 import inspect
 import asyncio
-from typing import TYPE_CHECKING, Coroutine, List, Callable, Any, Tuple, Union, Dict, overload, TypeVar
+from typing import TYPE_CHECKING, ClassVar, Coroutine, List, Callable, Any, Tuple, Union, Dict, overload, TypeVar
 
 
 if TYPE_CHECKING:
     from .state import ConnectionState
     from .types.interactions import (
+        ApplicationCommandPermissions as ApplicationCommandPermissionsPayload,
         Interaction as InteractionPayload,
+        ApplicationCommandOption as SlashOptionPayload,
         ApplicationCommandInteractionData as ApplicationCommandPayload,
-        ApplicationCommandOption as SlashOptionPayload 
     )
     C = TypeVar("C", bound="ApplicationCommand")
 
@@ -234,7 +236,7 @@ class ApplicationCommand:
         self.options: List[SlashOption] = options or []
         self.guild_ids: List[int] = guild_ids
         self.default_permission: bool = default_permission
-        self.guild_permissions: dict = guild_permissions
+        self.guild_permissions: Dict[int, SlashPermission] = guild_permissions
         self.permissions: SlashPermission = SlashPermission()
     async def __call__(self, *args, **kwargs):
         if self.cog is not None:
@@ -1005,12 +1007,12 @@ class SlashPermission:
         self.allowed = allowed
         self.forbidden = forbidden
 
-    def to_dict(self):
+    def to_dict(self) -> List[ApplicationCommandPermissionsPayload]:
         return [
             {'id': id, 'type': self.allowed[id], 'permission': True} for id in self.allowed
         ] + [
             {'id': id, 'type': self.forbidden[id], 'permission': False} for id in self.forbidden
         ]
 
-    role = 1
-    user = 2
+    role: ClassVar[int] = 1
+    user: ClassVar[int] = 2

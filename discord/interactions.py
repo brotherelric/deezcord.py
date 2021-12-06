@@ -26,7 +26,7 @@ DEALINGS IN THE SOFTWARE.
 """
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, TYPE_CHECKING, Tuple, Union, overload
+from typing import Any, Dict, List, Optional, TYPE_CHECKING, Tuple, Union, overload, Literal
 
 from . import utils
 from .http import Route
@@ -54,6 +54,7 @@ __all__ = (
 
 if TYPE_CHECKING:
     from .types.interactions import (
+        InteractionData,
         Interaction as InteractionPayload,
     )
     from .guild import Guild
@@ -247,9 +248,9 @@ class Interaction:
         self.application_id: int = data['application_id']
         """id of the application this interaction is for"""
         self.type: int = InteractionType(data['type'])
-        """The type of interaction. See :class:`~InteractionType` for more information"""
-        self.data: InteractionData = data['data']
-        """The passed data of the interaction"""
+        """the type of interaction"""
+        self.data: Optional[InteractionData] = data.get('data')
+        """the command data payload"""
         self.channel_id: Optional[int] = utils._get_as_snowflake(data, 'channel_id')
         """id of channel where the interaction was created"""
         self.guild_id: Optional[int] = utils._get_as_snowflake(data, 'guild_id')
@@ -258,7 +259,7 @@ class Interaction:
         """The user who created the interaction"""
         self.token: str = data['token']
         """a continuation token for responding to the interaction"""
-        self.version: int = data['version']
+        self.version: Literal[1] = data['version']
         """read-only property, always ``1``"""
         
         if data.get('member'):

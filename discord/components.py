@@ -40,7 +40,8 @@ if TYPE_CHECKING:
         SelectMenu as SelectMenuPayload,
         SelectOption as SelectOptionPayload,
         ActionRow as ActionRowPayload,
-        InputRow as InputRowPayload
+        InputRow as InputRowPayload,
+        Form as FormPayload,
     )
     from .emoji import Emoji
 
@@ -347,14 +348,12 @@ class Form(Component):
         self.inputs: List[InputRow] = inputs
         self.custom_id = custom_id or ''.join([choice(printable) for _ in range(20)])
 
-    def to_dict(self):
+    def to_dict(self) -> FormPayload:
         return {
             "custom_id": self.custom_id,
             "title": self.title,
             "components": [ActionRow([inp]).to_dict() for inp in self.inputs]
         }
-
-
 
 component = Union[Button, LinkButton, SelectMenu, InputRow]
 
@@ -455,7 +454,7 @@ class ComponentStore:
     @classmethod
     def from_dict(cls, data: List[ComponentPayload]):
         return cls([_component_factory(c) for c in data])
-    def to_dict(self):
+    def to_dict(self) -> List[ActionRowPayload]:
         return [r.to_dict() for r in self.rows]
 
     def find(self, *, custom_id):

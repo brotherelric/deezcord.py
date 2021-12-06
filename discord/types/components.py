@@ -31,7 +31,6 @@ from .emoji import PartialEmoji
 ComponentType = Literal[1, 2, 3]
 ButtonStyle = Literal[1, 2, 3, 4, 5]
 
-
 class ActionRow(TypedDict):
     type: Literal[1]
     components: List[Component]
@@ -84,6 +83,11 @@ class InputRow(_InputRowOptional):
     style: Union[Literal[1], Literal[2]]
     custom_id: str
     label: str
+
+class Form(TypedDict):
+    custom_id: str
+    title: str
+    components: List[ActionRow[InputRow]]
 
 
 Component = Union[ActionRow, ButtonComponent, SelectMenu]
