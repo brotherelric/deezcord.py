@@ -259,14 +259,21 @@ class ApplicationCommand:
         return not (self.guild_ids and len(self.guild_ids) > 0)
     def has_aliases(self) -> bool:
         return self.__aliases__ and len(self.__aliases__) > 0
-    def is_subcommand(self) -> bool:
-        return hasattr(self, 'base')
 
     async def edit(self, guild_id, **fields):
         ...
         return await self.update(guild_id=guild_id)
-    async def update(self, *, guild_id):
-        ...
+    async def update(self, *, guild_id=None):
+        if self.is_global():
+            await self._state.slash_http.edit_global_command(self.id, self.to_dict())
+            return
+        for guild in ([guild_id] if guild_id else self.guild_ids):
+            await self._state.slash_http.edit_guild_command(
+                self.id, 
+                guild_id, 
+                self.to_dict(), 
+                self.guild_permissions[guild].to_dict()
+            )
 
 class ChatInputCommand(ApplicationCommand):
 
@@ -294,7 +301,9 @@ class ChatInputCommand(ApplicationCommand):
             guild_permissions=guild_permissions, 
             default_permission=default_permission, 
             state=state
-        )  
+        )
+    def is_subcommand(self) -> bool:
+        return hasattr(self, 'base')
 class SlashCommand(ChatInputCommand):
 
     __slots__ = ChatInputCommand.__slots__
@@ -703,7 +712,7 @@ class CommandStore:
                     self[guild] = {}
                 if self[guild].get(type_key) is None:
                     self[guild][type_key] = {}
-                if command.is_subcommand():
+                if command.type is ApplicationCommandType.chat_input and command.is_subcommand():
                     # is subcommand
                     base = self[guild][type_key].get(command.base_name)
                     if base is None:

@@ -2009,11 +2009,12 @@ class PartialMessageable(discord.abc.Messageable, Hashable):
         The channel type associated with this partial messageable, if given.
     """
 
-    def __init__(self, state: ConnectionState, id: int, type: Optional[ChannelType] = None):
+    def __init__(self, state: ConnectionState, id: int, type: Optional[ChannelType] = None, permissions: Optional[int] = None):
         self._state: ConnectionState = state
         self._channel: Object = Object(id=id)
         self.id: int = id
         self.type: Optional[ChannelType] = type
+        self.permissions: Permissions = Permissions(int(permissions))
 
     async def _get_channel(self) -> Object:
         return self._channel

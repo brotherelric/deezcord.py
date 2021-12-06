@@ -26,30 +26,34 @@ DEALINGS IN THE SOFTWARE.
 """
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, TYPE_CHECKING, Tuple, Union, overload, Literal
+from typing import Any, Dict, List, Optional, TYPE_CHECKING, Tuple, Union, overload, Literal, Generic, TypeVar
+
+from discord.types.channel import PartialChannel
+
 
 from . import utils
 from .http import Route
 from .enums import ApplicationCommandType, ComponentType, OptionType, try_enum, InteractionType, InteractionResponseType
 from .errors import InteractionResponded, HTTPException, ClientException, InvalidArgument
-from .channel import PartialMessageable, ChannelType
 
 from .user import User
+from .role import Role
 from .member import Member
 from .flags import MessageFlags
 from .message import Message, Attachment
-from .object import Object
-from .permissions import Permissions
-from .webhook.async_ import async_context, Webhook, handle_message_parameters
 from .components import ComponentStore, Component, Button, SelectMenu, SelectOption
-from .abc import GuildChannel
+from .channel import VoiceChannel, StageChannel, TextChannel, CategoryChannel, StoreChannel, PartialMessageable
 
 __all__ = (
     'Interaction',
     'ResponseMessage',
+    
     'ComponentInteraction',
     'ButtonInteraction',
-    'SelectInteraction'
+    'SelectInteraction',
+
+    'SlashCommandInteraction',
+    'ContextCommandInteraction'
 )
 
 if TYPE_CHECKING:
@@ -57,12 +61,12 @@ if TYPE_CHECKING:
         InteractionData,
         Interaction as InteractionPayload,
     )
+    from .slash import ApplicationCommand, ContextCommand, ChatInputCommand
     from .guild import Guild
     from .state import ConnectionState
     from .file import File
     from .mentions import AllowedMentions
     from .embeds import Embed
-    from .channel import VoiceChannel, StageChannel, TextChannel, CategoryChannel, StoreChannel, PartialMessageable
     from .threads import Thread
 
     InteractionChannel = Union[
@@ -310,34 +314,34 @@ class Interaction:
     async def respond(self, content: str = ..., tts: bool = ..., 
         embed: Embed = ..., file: File = ..., allowed_mentions: AllowedMentions = ..., 
         mention_author: bool = ..., components: List[Component] = ..., delete_after: float = ...,
-        hidden: bool = ..., ninja_mode: bool = ...
+        hidden: bool = ...
     ): ...
 
     @overload
     async def respond(self, content: str = ..., tts: bool = ..., 
         embeds: List[Embed] = ..., file: File = ..., allowed_mentions: AllowedMentions = ..., 
         mention_author: bool = ..., components: List[Component] = ..., delete_after: float = ...,
-        hidden: bool = ..., ninja_mode: bool = ...
+        hidden: bool = ...
     ): ...
 
     @overload
     async def respond(self, content: str = ..., tts: bool = ..., 
         embed: Embed = ..., files: List[File] = ..., allowed_mentions: AllowedMentions = ..., 
         mention_author: bool = ..., components: List[Component] = ..., delete_after: float = ...,
-        hidden: bool = ..., ninja_mode: bool = ...
+        hidden: bool = ...
     ): ...
 
     @overload
     async def respond(self, content: str = ..., tts: bool = ..., 
         embeds: Embed = ..., files: List[File] = ..., allowed_mentions: AllowedMentions = ..., 
         mention_author: bool = ..., components: List[Component] = ..., delete_after: float = ...,
-        hidden: bool = ..., ninja_mode: bool = ...
+        hidden: bool = ...
     ): ...
 
 
     async def respond(self, content=None, *, tts=False, embed=None, embeds=None, file=None, files=None,
         allowed_mentions=None, mention_author=None, components=None, delete_after=None, 
-        hidden=False, ninja_mode=False
+        hidden=False
     ) -> ResponseMessage:
         """
         Responds to the interaction
@@ -378,18 +382,6 @@ class Interaction:
         :class:`~Message` | :class:`~EphemeralMessage`
             Returns the sent message
         """
-        if ninja_mode is True or all(y in [None, False] for x, y in locals().items() if x not in ["self"]):
-            try:
-                await self._state.http.respond_to(self.id, self.token, InteractionResponseType.deferred_message_update)
-                self.responded = True
-                return
-            except HTTPException as x:
-                if "value must be one of (4, 5)" in str(x).lower():
-                    # logging.error(str(x) + "\n" + "The 'ninja_mode' parameter is not supported for slash commands!")
-                    ninja_mode = False
-                else:
-                    raise x
-
         if self.responded is True:
             return await self.send(content=content, tts=tts, embed=embed, embeds=embeds, 
                 allowed_mentions=allowed_mentions, mention_author=mention_author, 
@@ -433,7 +425,7 @@ class Interaction:
         force=False
     ) -> ResponseMessage:
         """
-        Sends a message to the interaction using a webhook
+        Sends a follow-up message to the interaction using a webhook
         
         Parameters
         ----------
@@ -525,7 +517,29 @@ class ComponentInteraction(Interaction):
         self.message: Optional[Message] = None
         """for components, the message they were attached to"""
         if data.get("message"):
-            self.message = Message(data=data["message"], channel=self.channel, state=self._state)
+            self.message = Message(data=data["message"], channel=self.channel, state=self._state)   
+
+    async def respond(self, content=None, *, tts=False, embed=None, embeds=None, file=None, files=None,
+        allowed_mentions=None, mention_author=None, components=None, delete_after=None, 
+        hidden=False, ninja_mode=False
+    ) -> ResponseMessage:
+        if ninja_mode is True or all(y in [None, False] for x, y in locals().items() if x not in ["self"]):
+            await self._state.http.respond_to(self.id, self.token, InteractionResponseType.deferred_message_update)
+            self.responded = True
+            return
+        return super().respond(
+            content=content,
+            tts=tts,
+            embed=embed,
+            embeds=embeds,
+            file=file,
+            files=files,
+            allower_mentions=allowed_mentions,
+            mention_author=mention_author,
+            comoponents=components,
+            delete_after=delete_after,
+            hidden=hidden
+        )
     
 class ButtonInteraction(ComponentInteraction):
     component: Button
@@ -534,7 +548,6 @@ class ButtonInteraction(ComponentInteraction):
 
     def __new__(cls, state, data):
         return object.__new__(cls)
-
 class SelectInteraction(ComponentInteraction):
     component: SelectMenu
 
@@ -553,7 +566,6 @@ class SelectInteraction(ComponentInteraction):
 
 
 class ApplicationCommandInteraction(Interaction):
-
     __slots__ = ('command',)
 
     def __new__(cls, state, data):
@@ -564,7 +576,7 @@ class ApplicationCommandInteraction(Interaction):
         return object.__new__(cls)
     def __init__(self, state: ConnectionState, data: InteractionPayload) -> None:
         super().__init__(state, data)
-        self.command = self._state._command_store.get_interaction_command(data)
+        self.command: ApplicationCommand = self._state._command_store.get_interaction_command(data)
 
     async def respond(self, content=None, *, tts=False, embed=None, embeds=None, file=None, files=None,
         allowed_mentions=None, mention_author=None, components=None, delete_after=None, 
@@ -607,48 +619,22 @@ class ApplicationCommandInteraction(Interaction):
         :class:`~Message` | :class:`~EphemeralMessage`
             Returns the sent message
         """
-        if self.responded is True:
-            return await self.send(content=content, tts=tts, embed=embed, embeds=embeds, 
-                allowed_mentions=allowed_mentions, mention_author=mention_author, 
-                components=components, hidden=hidden
-            )
-
         if form is not None:
             await self._state.http.respond_to(self.id, self.token, InteractionResponseType.modal, data=form.to_dict())
             return
-
-        payload = {"tts": tts}
-        if content is not None:
-            payload["content"] = str(content)
-        if embed is not None or embeds is not None:
-            payload["embed"] = embeds or [embed] 
-        if allowed_mentions is not None:
-            payload["alllowed_mentions"] = allowed_mentions.to_dict()
-        if mention_author is not None:
-            allowed_mentions = payload["allowed_mentions"] if "allowed_mentions" in payload else AllowedMentions().to_dict()
-            allowed_mentions['replied_user'] = mention_author
-            payload["allowed_mentions"] = allowed_mentions
-        if components is not None:
-            payload["components"] = ComponentStore(components).to_dict()
-            
-        
-        hide_message = self._deferred_hidden or not self.deferred and hidden is True
-
-        if hide_message:
-            payload["flags"] = 64
-        
-        if self.deferred:
-            route = Route("PATCH", f'/webhooks/{self.application_id}/{self.token}/messages/@original')
-            if file is not None or files is not None:
-                await self._state.http.request(route=route, files=files or [file], form=utils.get_form(files or [file], payload))
-            else:
-                await self._state.http.request(route, json=payload)    
-        else:
-            await self._state.http.respond_to(self.id, self.token, InteractionResponseType.channel_message, payload, files=files or [file] if file is not None else None)
-        self.responded = True
-        
-        r = await self._state.http.request(Route("GET", f"/webhooks/{self.application_id}/{self.token}/messages/@original"))
-        return ResponseMessage(state=self._state, channel=self.channel, data=r, application_id=self.application_id, token=self.token)
+        return super().respond(
+            content=content,
+            tts=tts,
+            embed=embed,
+            embeds=embeds,
+            file=file,
+            files=files,
+            allower_mentions=allowed_mentions,
+            mention_author=mention_author,
+            comoponents=components,
+            delete_after=delete_after,
+            hidden=hidden
+        )
 
 class SlashCommandInteraction(ApplicationCommandInteraction):
     __slots__ = ('options',)
@@ -657,8 +643,9 @@ class SlashCommandInteraction(ApplicationCommandInteraction):
         return object.__new__(cls)
     def __init__(self, state, data):
         super().__init__(state, data)
-        self.options: Dict[str, str] = {}
-        print(self.data)
+        self.command: ChatInputCommand
+
+        self.options: Dict[str, Any] = {}
         if len(self.data['options']) > 0:
             if self.data['options'][0] == OptionType.subcommand.value:
                 self.options = self.data['options'][0].get('options', {})
@@ -670,40 +657,44 @@ class SlashCommandInteraction(ApplicationCommandInteraction):
                     value = op['value']
                     name = op['name']
                     if type is OptionType.string:
-                        return str(op['value'])
+                        self.options[name] = str(op['value'])
                     if type is OptionType.integer:
-                        return int(op['value'])
+                        self.options[name] = int(op['value'])
                     if type is OptionType.boolean:
-                        return bool(op['value'])
+                        self.options[name] = bool(op['value'])
                     if type is OptionType.member:
                         if self.data['resolved'].get('members'):
                             member = self.data['resolved']['members'][value]
                             member['user'] = self.data['resolved']['users'][value]
-                            return Member(data=member, guild=self.guild, state=self._state)
+                            self.options[name] = Member(data=member, guild=self.guild, state=self._state)
                         else:
-                            return User(data=self.data['resolved']['users'][value], state=self._state)
+                            self.options[name] = User(data=self.data['resolved']['users'][value], state=self._state)
                     if type is OptionType.channel:
-                        return GuildChannel(
-                            data=self.data['resolved']['channels'][value], 
-                            guild=self.guild, state=self._state
+                        self.options[name] = self._state.get_channel(int(value)) or PartialMessageable(
+                            state=self._state,
+                            id=int(value),
+                            type=self.data['resolved']['channels'][value]['type'],
+                            permissions=int(self.data['resolved']['channels'][value]['permissions'])
                         )
-                        # you can't select channels in DM commands, it will say invalid channel_id
                     if type is OptionType.role:
-                        ...
+                        self.options[name] = Role(
+                            state=self._state,
+                            guild=self.guild,
+                            data=self.data['resolved']['roles'][value],
+                        )
                     if type is OptionType.float:
-                        ...
-
+                        self.options[name] = float(value)
 class ContextCommandInteraction(ApplicationCommandInteraction):
     __slots__ = (
         'target_id',
-        'target'
+        'target',
     )
+    
     def __new__(cls, state, data):
         return object.__new__(cls)
-
     def __init__(self, state: ConnectionState, data: InteractionPayload):
         super().__init__(state, data)
-        self.command = self._state._command_store.get_interaction_command(data)
+        self.command: ContextCommand
         self.target_id: int = utils._get_as_snowflake(data['data'], 'target_id')
 
         self.target: Union[Message, Member, User]
