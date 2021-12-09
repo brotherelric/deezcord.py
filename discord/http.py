@@ -84,6 +84,7 @@ if TYPE_CHECKING:
         widget,
         threads,
         voice,
+        event,
         sticker,
     )
     from .types.snowflake import Snowflake, SnowflakeList
@@ -1283,6 +1284,20 @@ class HTTPClient:
 
     def get_all_guild_channels(self, guild_id: Snowflake) -> Response[List[guild.GuildChannel]]:
         return self.request(Route('GET', '/guilds/{guild_id}/channels', guild_id=guild_id))
+
+    def get_events(
+        self, guild_id: Snowflake, with_users: bool = False
+    ) -> Response[List[event.Event]]:
+        params: Dict[str, Any] = {
+            'with_users': int(with_users)
+        }
+
+        r = Route('GET', '/guilds/{guild_id}/scheduled-events', guild_id=guild_id)
+        return self.request(r, params=params)
+    def get_event(
+        self, guild_id: Snowflake, event_id: Snowflake
+    ) -> Response[event.Event]:
+        return self.request(Route('GET', '/guilds/{guild_id}/scheduled-events/{event_id}', guild_id=guild_id, event_id=event_id))
 
     def get_members(
         self, guild_id: Snowflake, limit: int, after: Optional[Snowflake]

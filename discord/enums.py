@@ -57,6 +57,9 @@ __all__ = (
     'InteractionResponseType',
     'OptionType',
     'NSFWLevel',
+    'OptionType',
+    'ButtonStyle',
+    'TextStyleType',
 )
 
 
@@ -617,9 +620,30 @@ class NSFWLevel(Enum, comparable=True):
     age_restricted = 3
 
 
+class PrivacyLevel(Enum):
+    guild_only = 2
+
+class EntityType(Enum):
+    stage_instance = 1
+    voice = 2
+    external = 3
+
+class EventStatus(Enum):
+    """
+    Valid Guild Scheduled Event Status Transitions
+    ----------------------------------------------
+
+    - ``scheduled --> active``
+    - ``active --> completed``
+    - ``scheduled --> canceled``
+    """
+    scheduled = 1
+    active = 2
+    completed = 3
+    canceled = 4
+
+
 T = TypeVar('T')
-
-
 def create_unknown_value(cls: Type[T], val: Any) -> T:
     value_cls = cls._enum_value_cls_  # type: ignore
     name = f'unknown_{val}'

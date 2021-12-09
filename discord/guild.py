@@ -1715,6 +1715,9 @@ class Guild(Hashable):
         data = await self._state.http.get_member(self.id, member_id)
         return Member(data=data, state=self._state, guild=self)
 
+    async def fetch_events(self, *, with_user_count: bool = False):
+        data = await self._state.http
+
     async def fetch_ban(self, user: Snowflake) -> BanEntry:
         """|coro|
 
