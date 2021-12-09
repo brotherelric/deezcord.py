@@ -1,6 +1,6 @@
-from typing import TypedDict, Literal, Optional
+from typing import TypedDict, Literal, Optional, List
 
-from .user import User
+from .user import PartialUser
 
 PrivacyLevel = Literal[2]
 EntityType = Literal[1, 2, 3]
@@ -23,5 +23,6 @@ class Event(TypedDict):
     entity_type: EntityType
     entity_id: str
     entity_metadata: Optional[EntityMetadata]
-    creator: Optional[User]
+    sku_ids: List[str]
+    creator: Optional[PartialUser]
     user_count: Optional[int]

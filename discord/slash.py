@@ -118,7 +118,7 @@ class SlashOption:
         name: str,
         description: str=MISSING, 
         required: bool=True, 
-        choices: Union[List[Dict[str, Union[int, float, str]]], List[Tuple[str, Union[int, float, str]]]]=None, 
+        choices: Union[List[Dict[str, Union[int, float, str]]], List[Tuple[str, Union[int, float, str]]], List[str]] = None, 
         autocomplete: bool=None, 
         channel_types: List[ChannelType]=None, 
         min_value: Union[int, float]=None, 
@@ -130,15 +130,17 @@ class SlashOption:
         self.description = description or '\u200b'
         self.required = required
         self.autocomplete = autocomplete
-        self.choices: List[Dict[str, Union[int, float, str]]] = (
-            [{'name': c[0], 'value': c[1]} for c in choices]
-                if choices and all(isinstance(c, tuple) for c in (choices)) else 
-            choices
-        )
         self.channel_types = channel_types
         self.min_value = min_value
         self.max_value = max_value
         self.options = options
+        self.choices: List[Dict[str, Union[int, float, str]]]
+        if choices is not None and all(isinstance(c, tuple) for c in choices):
+            self.choices = [{'name': c[0], 'value': c[1]} for c in choices]
+        elif choices is not None and all(isinstance(c, str) for c in choices):
+            self.choices = [{'name': c, 'value': c} for c in choices]
+        else:
+            self.choices = choices
 
         if hasattr(self.type, '__types__'):
             self.channel_types = self.type.__types__

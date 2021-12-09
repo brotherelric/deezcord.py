@@ -348,6 +348,7 @@ class Client:
         return self._ready.is_set()
 
     async def _run_event(self, coro: Callable[..., Coroutine[Any, Any, Any]], event_name: str, *args: Any, **kwargs: Any) -> None:
+
         try:
             await coro(*args, **kwargs)
         except asyncio.CancelledError:

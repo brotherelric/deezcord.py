@@ -43,8 +43,10 @@ from typing import (
     overload,
 )
 
+
 from . import utils, abc
 from .role import Role
+from .event import ScheduledEvent
 from .member import Member, VoiceState
 from .emoji import Emoji
 from .errors import InvalidData
@@ -56,6 +58,8 @@ from .channel import _guild_channel_factory
 from .channel import _threaded_guild_channel_factory
 from .enums import (
     AuditLogAction,
+    EntityType,
+    PrivacyLevel,
     VideoQualityMode,
     VoiceRegion,
     ChannelType,
@@ -1715,8 +1719,62 @@ class Guild(Hashable):
         data = await self._state.http.get_member(self.id, member_id)
         return Member(data=data, state=self._state, guild=self)
 
-    async def fetch_events(self, *, with_user_count: bool = False):
-        data = await self._state.http
+    @overload
+    async def create_event(
+        self,
+        *,
+        location: Union[VoiceChannel, StageChannel, str] = ...,
+        name: str = ...,
+        scheduled_start_time: datetime.datetime = ...,
+        scheduled_end_time: datetime.datetime = ...,
+        description: str = ...,
+        privacy_level: PrivacyLevel = ...,
+        reason: str = ...
+    ) -> ScheduledEvent:
+        ...
+    async def create_event(
+        self,
+        *,
+        location: Union[VoiceChannel, StageChannel, str],
+        name: str,
+        scheduled_start_time: datetime.datetime,
+        scheduled_end_time: Optional[datetime.datetime] = MISSING,
+        description: Optional[str] = MISSING,
+        privacy_level: PrivacyLevel = PrivacyLevel.guild_only,
+        reason: str = None
+    ):
+        fields: Dict[str, Any] = {}
+        if isinstance(location, StageChannel):
+            fields['channel_id'] = location.id
+            fields['entity_type'] = EntityType.stage_instance.value
+        elif isinstance(location, VoiceChannel):
+            fields['channel_id'] = location.id
+            fields['entity_type'] = EntityType.voice.value
+        else:
+            fields['channel_id'] = None # has to be set for external entity
+            fields['entity_type'] = EntityType.external.value
+            fields['entity_metadata'] = {'location': str(location)}
+        fields['name'] = name
+        fields['scheduled_start_time'] = scheduled_start_time.astimezone().isoformat()
+        if scheduled_end_time is not MISSING:
+            fields['scheduled_end_time'] = scheduled_end_time.astimezone().isoformat()
+        if description is not MISSING:
+            fields['description'] = description
+        fields['privacy_level'] = privacy_level.value
+
+        data = await self._state.http.create_event(self.id, reason=reason, **fields)
+        if data:
+            return ScheduledEvent(guild=self, state=self._state, data=data)
+
+
+    async def fetch_events(self, *, with_user_count: bool = False) -> List[ScheduledEvent]:
+        data = await self._state.http.get_events(self.id, with_user_count)
+        return [ScheduledEvent(guild=self, state=self._state, data=d) for d in data]
+    
+    async def fetch_event(self, id) -> ScheduledEvent:
+        data = await self._state.http.get_event(self.id, id)
+        return ScheduledEvent(guild=self, state=self._state, data=data)
+    
 
     async def fetch_ban(self, user: Snowflake) -> BanEntry:
         """|coro|

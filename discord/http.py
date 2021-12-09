@@ -1285,6 +1285,21 @@ class HTTPClient:
     def get_all_guild_channels(self, guild_id: Snowflake) -> Response[List[guild.GuildChannel]]:
         return self.request(Route('GET', '/guilds/{guild_id}/channels', guild_id=guild_id))
 
+
+    # event management
+
+    def create_event(
+        self,
+        guild_id,
+        *,
+        reason=None,
+        **fields,
+    ) -> Response[event.Event]:
+        return self.request(
+            Route('POST', '/guilds/{guild_id}/scheduled-events', guild_id=guild_id), 
+            json=fields, reason=reason
+        )
+
     def get_events(
         self, guild_id: Snowflake, with_users: bool = False
     ) -> Response[List[event.Event]]:
@@ -1298,6 +1313,54 @@ class HTTPClient:
         self, guild_id: Snowflake, event_id: Snowflake
     ) -> Response[event.Event]:
         return self.request(Route('GET', '/guilds/{guild_id}/scheduled-events/{event_id}', guild_id=guild_id, event_id=event_id))
+
+    def edit_event(
+        self, guild_id: Snowflake, event_id: Snowflake, *, reason=None,
+        channel_id: Snowflake = None, entity_metadata: Dict[str, str] = None, 
+        name: str=None, privacy_level: event.PrivacyLevel=None,
+        scheduled_start_time: str=None, scheduled_end_time:str=None, 
+        description: str=None, entity_type: event.EntityType=None, status: event.EventStatus=None
+    ):
+        payload = {}
+        
+        if channel_id is not MISSING:
+            payload['channel_id'] = channel_id
+        if entity_metadata is not MISSING:
+            payload['entity_metadata'] = entity_metadata
+        if name is not MISSING:
+            payload['name'] = name
+        if privacy_level is not MISSING:
+            payload['privacy_level'] = privacy_level
+        if scheduled_start_time is not MISSING:
+            payload['scheduled_start_time'] = scheduled_start_time
+        if scheduled_end_time is not MISSING:
+            payload['scheduled_end_time'] = scheduled_end_time
+        if description is not MISSING:
+            payload['description'] = description
+        if entity_type is not MISSING:
+            payload['entity_type'] = entity_type
+        if status is not MISSING:
+            payload['status'] = status
+
+        r = Route(
+            'PATCH', '/guilds/{guild_id}/scheduled-events/{event_id}', 
+            guild_id=guild_id, event_id=event_id
+        )
+        return self.request(r, json=payload, reason=reason)
+
+    def delete_event(
+        self,
+        guild_id: Snowflake,
+        event_id: Snowflake,
+        *,
+        reason: Optional[str] = None
+    ) -> Response[None]:
+        return self.request(
+            Route(
+                'DELETE', '/guilds/{guild_id}/scheduled-events/{event_id}', 
+                guild_id=guild_id, event_id=event_id
+            ), reason=reason
+        )
 
     def get_members(
         self, guild_id: Snowflake, limit: int, after: Optional[Snowflake]
