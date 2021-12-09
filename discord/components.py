@@ -221,7 +221,7 @@ class SelectMenu(Component):
     @classmethod
     def from_dict(cls, data: SelectMenuPayload):
         return cls(
-            options=[SelectOption.from_dict(op) for op in data.get("optioins", [])],
+            options=[SelectOption.from_dict(op) for op in data.get("options", [])],
             custom_id=data.get("custom_id"),
             placeholder=data.get("placeholder"),
             min_values=data.get("min_values", 1),

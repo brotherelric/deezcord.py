@@ -211,9 +211,6 @@ class ResponseMessage(Message):
             ))
         if delete_after is not None:
             await self.delete(delay=delete_after)
-    async def delete(self):
-        """Override for delete function that will throw an exception"""
-        raise NotImplementedError()
 
 class Interaction:
     __slots__: Tuple[str, ...] = (
@@ -343,46 +340,8 @@ class Interaction:
         allowed_mentions=None, mention_author=None, components=None, delete_after=None, 
         hidden=False
     ) -> ResponseMessage:
-        """
-        Responds to the interaction
-        
-        Parameters
-        ----------
-        content: :class:`str`, optional
-            The raw message content
-        tts: :class:`bool`
-            Whether the message should be send with text-to-speech
-        embed: :class:`discord.Embed`
-            Embed rich content
-        embeds: List[:class:`discord.Embed`]
-            A list of embeds for the message
-        file: :class:`discord.File`
-            The file which will be attached to the message
-        files: List[:class:`discord.File`]
-            A list of files which will be attached to the message
-        nonce: :class:`int`
-            The nonce to use for sending this message
-        allowed_mentions: :class:`discord.AllowedMentions`
-            Controls the mentions being processed in this message
-        mention_author: :class:`bool`
-            Whether the author should be mentioned
-        components: List[:class:`~Button` | :class:`~LinkButton` | :class:`~SelectMenu`]
-            A list of message components to be included
-        delete_after: :class:`float`
-            After how many seconds the message should be deleted, only works for non-hiddend messages; default MISSING
-        listener: :class:`Listener`
-            A component-listener for this message
-        hidden: :class:`bool`
-            Whether the response should be visible only to the user 
-        ninja_mode: :class:`bool`
-            If true, the client will respond to the button interaction with almost nothing and returns nothing
-        
-        Returns
-        -------
-        :class:`~Message` | :class:`~EphemeralMessage`
-            Returns the sent message
-        """
         if self.responded is True:
+            # raise InteractionResponded(self)
             return await self.send(content=content, tts=tts, embed=embed, embeds=embeds, 
                 allowed_mentions=allowed_mentions, mention_author=mention_author, 
                 components=components, hidden=hidden
@@ -401,7 +360,6 @@ class Interaction:
             payload["allowed_mentions"] = allowed_mentions
         if components is not None:
             payload["components"] = ComponentStore(components).to_dict()
-
         
         hide_message = self._deferred_hidden or not self.deferred and hidden is True
 
@@ -418,8 +376,20 @@ class Interaction:
             await self._state.http.respond_to(self.id, self.token, InteractionResponseType.channel_message, payload, files=files or [file] if file is not None else None)
         self.responded = True
         
-        r = await self._state.http.request(Route("GET", f"/webhooks/{self.application_id}/{self.token}/messages/@original"))
-        return ResponseMessage(state=self._state, channel=self.channel, data=r, application_id=self.application_id, token=self.token)
+        msg = ResponseMessage(
+            token=self.token,
+            state=self._state, 
+            channel=self.channel, 
+            application_id=self.application_id, 
+            data=(
+                await self._state.http.request(
+                    Route("GET", f"/webhooks/{self.application_id}/{self.token}/messages/@original")
+                )
+            )
+        )
+        if delete_after is not None:
+            await msg.delete(delay=delete_after)
+        return msg
     async def send(self, content=None, *, tts=None, embed=None, embeds=None, file=None, files=None,
         allowed_mentions=None, mention_author=None, components=None, delete_after=None, hidden=False,
         force=False
@@ -512,12 +482,11 @@ class ComponentInteraction(Interaction):
 
     def __init__(self, state: ConnectionState, data: InteractionPayload):
         super().__init__(state, data)
-        self.component: Component = self.message.components.find(custom_id=self.data['custom_id'])
         """the component that created the interaction"""
         self.message: Optional[Message] = None
         """for components, the message they were attached to"""
-        if data.get("message"):
-            self.message = Message(data=data["message"], channel=self.channel, state=self._state)   
+        self.message = Message(data=data["message"], channel=self.channel, state=self._state)   
+        self.component: Component = self.message.components.find(custom_id=self.data['custom_id'])
 
     async def respond(self, content=None, *, tts=False, embed=None, embeds=None, file=None, files=None,
         allowed_mentions=None, mention_author=None, components=None, delete_after=None, 
@@ -527,16 +496,16 @@ class ComponentInteraction(Interaction):
             await self._state.http.respond_to(self.id, self.token, InteractionResponseType.deferred_message_update)
             self.responded = True
             return
-        return super().respond(
+        return await super().respond(
             content=content,
             tts=tts,
             embed=embed,
             embeds=embeds,
             file=file,
             files=files,
-            allower_mentions=allowed_mentions,
+            allowed_mentions=allowed_mentions,
             mention_author=mention_author,
-            comoponents=components,
+            components=components,
             delete_after=delete_after,
             hidden=hidden
         )
@@ -551,7 +520,10 @@ class ButtonInteraction(ComponentInteraction):
 class SelectInteraction(ComponentInteraction):
     component: SelectMenu
 
-    __slots__ = ComponentInteraction.__slots__
+    __slots__ = (
+        'selected_values',
+        'selected_options'
+    )
     
     def __new__(cls, state, data):
         return object.__new__(cls)
@@ -622,16 +594,16 @@ class ApplicationCommandInteraction(Interaction):
         if form is not None:
             await self._state.http.respond_to(self.id, self.token, InteractionResponseType.modal, data=form.to_dict())
             return
-        return super().respond(
+        return await super().respond(
             content=content,
             tts=tts,
             embed=embed,
             embeds=embeds,
             file=file,
             files=files,
-            allower_mentions=allowed_mentions,
+            allowed_mentions=allowed_mentions,
             mention_author=mention_author,
-            comoponents=components,
+            components=components,
             delete_after=delete_after,
             hidden=hidden
         )
