@@ -102,6 +102,7 @@ if TYPE_CHECKING:
     from .webhook import Webhook
     from .state import ConnectionState
     from .voice_client import VoiceProtocol
+    from .slash import ApplicationCommand
 
     import datetime
 
@@ -263,6 +264,7 @@ class Guild(Hashable):
         'preferred_locale',
         'nsfw_level',
         '_members',
+        '_events',
         '_channels',
         '_icon',
         '_banner',
@@ -279,6 +281,7 @@ class Guild(Hashable):
         '_public_updates_channel_id',
         '_stage_instances',
         '_threads',
+        '_commands'
     )
 
     _PREMIUM_GUILD_LIMITS: ClassVar[Dict[Optional[int], _GuildLimit]] = {
@@ -292,10 +295,18 @@ class Guild(Hashable):
     def __init__(self, *, data: GuildPayload, state: ConnectionState):
         self._channels: Dict[int, GuildChannel] = {}
         self._members: Dict[int, Member] = {}
+        self._events: Dict[int, ScheduledEvent] = {}
         self._voice_states: Dict[int, VoiceState] = {}
         self._threads: Dict[int, Thread] = {}
+        self._commands: Dict[int, ApplicationCommand] = {}
         self._state: ConnectionState = state
         self._from_data(data)
+
+    def _add_event(self, event: ScheduledEvent, /) -> None:
+        self._events[event.id] = event
+    
+    def _remove_event(self, event: ScheduledEvent, /) -> None:
+        self._events.pop(event.id, None)
 
     def _add_channel(self, channel: GuildChannel, /) -> None:
         self._channels[channel.id] = channel
@@ -336,6 +347,13 @@ class Guild(Hashable):
         for k in to_remove:
             del self._threads[k]
         return to_remove
+
+    def _add_command(self, command: ApplicationCommand, /):
+        self._commands[command.id] = command
+
+    def _remove_command(self, command: ApplicationCommand, /):
+        self._commands.pop(command.id, None)
+
 
     def __str__(self) -> str:
         return self.name or ''
@@ -488,7 +506,10 @@ class Guild(Hashable):
                 factory, ch_type = _guild_channel_factory(c['type'])
                 if factory:
                     self._add_channel(factory(guild=self, data=c, state=self._state))  # type: ignore
-
+        if 'guild_scheduled_events' in data:
+            events = data['guild_scheduled_events']
+            for event in events:
+                self._add_event(ScheduledEvent(guild=self, state=self._state, data=event))
         if 'threads' in data:
             threads = data['threads']
             for thread in threads:
@@ -498,6 +519,11 @@ class Guild(Hashable):
     def channels(self) -> List[GuildChannel]:
         """List[:class:`abc.GuildChannel`]: A list of channels that belongs to this guild."""
         return list(self._channels.values())
+
+    @property
+    def events(self) -> List[ScheduledEvent]:
+        """List[:class:`abc.GuildChannel`]: A list of events that belongs to this guild."""
+        return list(self._events.values())
 
     @property
     def threads(self) -> List[Thread]:
@@ -653,6 +679,9 @@ class Guild(Hashable):
             The returned channel or ``None`` if not found.
         """
         return self._channels.get(channel_id)
+
+    def get_event(self, event_id: int, /) -> Optional[ScheduledEvent]:
+        return self._events.get(event_id)
 
     def get_thread(self, thread_id: int, /) -> Optional[Thread]:
         """Returns a thread with the given ID.

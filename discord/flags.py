@@ -867,6 +867,9 @@ class Intents(BaseFlags):
         """
         return 1 << 14
 
+    @flag_value
+    def guild_events(self):
+        return 1 << 16
 
 @fill_with_flags()
 class MemberCacheFlags(BaseFlags):

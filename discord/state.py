@@ -36,11 +36,12 @@ import inspect
 
 import os
 
-from discord.http import SlashHTTPClient
 
+from .event import ScheduledEvent
 from .guild import Guild
+from .http import SlashHTTPClient
 from .activity import BaseActivity
-from .user import User, ClientUser
+from .user import User, ClientUser, PartialUser
 from .emoji import Emoji
 from .mentions import AllowedMentions
 from .partial_emoji import PartialEmoji
@@ -61,10 +62,7 @@ from .slash import CommandStore, ApplicationCommand
 from .stage_instance import StageInstance
 from .threads import Thread, ThreadMember
 from .sticker import GuildSticker
-from .interactions import (
-    Interaction, 
-    ComponentInteraction, ButtonInteraction, SelectInteraction
-)
+from .interactions import Interaction
 
 if TYPE_CHECKING:
     from .abc import PrivateChannel
@@ -761,6 +759,65 @@ class ConnectionState:
     def parse_invite_delete(self, data) -> None:
         invite = Invite.from_gateway(state=self, data=data)
         self.dispatch('invite_delete', invite)
+
+    def parse_guild_scheduled_event_delete(self, data):
+        guild = self._get_guild(utils._get_as_snowflake(data, 'guild_id'))
+        event_id = int(data['id'])
+        if guild is not None:
+            event = guild.get_event(event_id)
+            if event is not None:
+                guild._remove_event(event)
+                self.dispatch('guild_event_delete', event)
+
+    def parse_guild_scheduled_event_update(self, data) -> None:
+        event_id = int(data['id'])
+        guild_id = utils._get_as_snowflake(data, 'guild_id')
+        guild = self._get_guild(guild_id)
+        if guild is not None:
+            event = guild.get_event(event_id)
+            if event is not None:
+                old_event = copy.copy(event)
+                event._update(guild, data)
+                self.dispatch('guild_event_update', old_event, event)
+            else:
+                _log.debug('GUILD_SCHEDULED_EVENT_UPDATE referencing an unknown event ID: %s. Discarding.', event_id)
+        else:
+            _log.debug('GUILD_SCHEDULED_EVENT_UPDATE referencing an unknown guild ID: %s. Discarding.', guild_id)
+    
+    def parse_guild_scheduled_event_create(self, data) -> None:
+        guild_id = utils._get_as_snowflake(data, 'guild_id')
+        guild = self._get_guild(guild_id)
+        if guild is not None:
+            event = ScheduledEvent(guild=guild, state=self, data=data)
+            guild._add_event(event)
+            self.dispatch('guild_event_create', event)
+        else:
+            _log.debug('GUILD_SCHEDULED_EVENT_CREATE referencing an unknown guild ID: %s. Discarding.', guild_id)
+
+    def parse_guild_scheduled_event_user_remove(self, data) -> None:
+        guild = self._get_guild(utils._get_as_snowflake(data, 'guild_id'))
+        if guild is not None:
+            event = guild.get_event(utils._get_as_snowflake(data, 'guild_scheduled_event_id'))
+            if event is not None:
+                user = PartialUser(state=self, id=int(data['user_id']))
+                event._remove_subscriber(user)
+                self.dispatch('guild_event_user_unsubscribe', event, user)
+
+    def parse_guild_scheduled_event_user_add(self, data) -> None:
+        guild_id = utils._get_as_snowflake(data, 'guild_id')
+        guild = self._get_guild(guild_id)
+        if guild is not None:
+            event_id = utils._get_as_snowflake(data, 'guild_scheduled_event_id')
+            event = guild.get_event(event_id)
+            if event is not None:
+                user = PartialUser(state=self, id=int(data['user_id']))
+                event._add_subscriber(user)
+                self.dispatch('guild_event_user_subscribe', event, user)
+            else:
+                _log.debug('GUILD_SCHEDULED_EVENT_USER_ADDD referencing an unknown event ID: %s. Discarding.', event_id)
+        else:
+            _log.debug('GUILD_SCHEDULED_EVENT_USER_ADDD referencing an unknown guild ID: %s. Discarding.', guild_id)
+
 
     def parse_channel_delete(self, data) -> None:
         guild = self._get_guild(utils._get_as_snowflake(data, 'guild_id'))

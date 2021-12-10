@@ -618,7 +618,7 @@ class SlashCommandInteraction(ApplicationCommandInteraction):
         self.command: ChatInputCommand
 
         self.options: Dict[str, Any] = {}
-        if len(self.data['options']) > 0:
+        if 'options' in self.data and len(self.data['options']) > 0:
             if self.data['options'][0] == OptionType.subcommand.value:
                 self.options = self.data['options'][0].get('options', {})
             elif self.data['options'][0] == OptionType.subcommand_group.value:

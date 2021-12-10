@@ -525,7 +525,7 @@ class HTTPClient:
         self.__session = aiohttp.ClientSession(connector=self.connector, ws_response_class=DiscordClientWebSocketResponse)
         old_token = self.token
         self.token = token
-
+        
         try:
             data = await self.request(Route('GET', '/users/@me'))
         except HTTPException as exc:
@@ -1361,6 +1361,41 @@ class HTTPClient:
                 guild_id=guild_id, event_id=event_id
             ), reason=reason
         )
+
+    def subscribe_event(
+        self,
+        guild_id,
+        event_id,
+    ) -> Response[None]:
+        return self.request(Route('PUT', '/guilds/{guild_id}/scheduled-events/{event_id}/users/@me', guild_id=guild_id, event_id=event_id))
+
+    def unsubscribe_event(
+        self,
+        guild_id,
+        event_id,
+    ) -> Response[None]:
+        return self.request(Route('DELETE', '/guilds/{guild_id}/scheduled-events/{event_id}/users/@me', guild_id=guild_id, event_id=event_id))
+
+    def get_event_subscribers(
+        self,
+        guild_id: Snowflake,
+        event_id: Snowflake,
+        *,
+        limit: int=100,
+        with_member: bool=True,
+        before: Snowflake=None,
+        after: Snowflake=None
+    ) -> Response[Union[List[member.MemberWithUser], List[user.User]]]:
+        params: Dict[str, Any] = {
+            'limit': limit,
+            'with_member': int(with_member),
+        }
+        if before is not None:
+            params['before'] = before
+        if after is not None:
+            params['after'] = after
+        r = Route('GET', '/guilds/{guild_id}/scheduled-events/{event_id}/users', guild_id=guild_id, event_id=event_id)
+        return self.request(r, params=params)
 
     def get_members(
         self, guild_id: Snowflake, limit: int, after: Optional[Snowflake]

@@ -57,7 +57,6 @@ class _UserTag:
     __slots__ = ()
     id: int
 
-
 class BaseUser(_UserTag):
     __slots__ = (
         'name',
@@ -450,6 +449,116 @@ class User(BaseUser, discord.abc.Messageable):
     def _copy(cls, user: User):
         self = super()._copy(user)
         self._stored = False
+        return self
+
+    async def _get_channel(self) -> DMChannel:
+        ch = await self.create_dm()
+        return ch
+
+    @property
+    def dm_channel(self) -> Optional[DMChannel]:
+        """Optional[:class:`DMChannel`]: Returns the channel associated with this user if it exists.
+
+        If this returns ``None``, you can create a DM channel by calling the
+        :meth:`create_dm` coroutine function.
+        """
+        return self._state._get_private_channel_by_user(self.id)
+
+    @property
+    def mutual_guilds(self) -> List[Guild]:
+        """List[:class:`Guild`]: The guilds that the user shares with the client.
+
+        .. note::
+
+            This will only return mutual guilds within the client's internal cache.
+
+        .. versionadded:: 1.7
+        """
+        return [guild for guild in self._state._guilds.values() if guild.get_member(self.id)]
+
+    async def create_dm(self) -> DMChannel:
+        """|coro|
+
+        Creates a :class:`DMChannel` with this user.
+
+        This should be rarely called, as this is done transparently for most
+        people.
+
+        Returns
+        -------
+        :class:`.DMChannel`
+            The channel that was created.
+        """
+        found = self.dm_channel
+        if found is not None:
+            return found
+
+        state = self._state
+        data: DMChannelPayload = await state.http.start_private_message(self.id)
+        return state.add_dm_channel(data)
+
+
+class PartialUser(discord.abc.Messageable):
+    __slots__ = (
+        'id',
+        '_state',
+    )
+    def __init__(self, *, state, id) -> None:
+        self._state: ConnectionState = state
+        self.id: int = id
+    
+    def __del__(self) -> None:
+        try:
+            if self._stored:
+                self._state.deref_user(self.id)
+        except Exception:
+            pass
+        
+    def __repr__(self) -> str:
+        return f'<User id={self.id}>'
+
+    def __eq__(self, other: Any) -> bool:
+        return isinstance(other, _UserTag) and other.id == self.id
+
+    def __hash__(self) -> int:
+        return self.id >> 22
+
+    @property
+    def mention(self) -> str:
+        """:class:`str`: Returns a string that allows you to mention the given user."""
+        return f'<@{self.id}>'
+
+    @property
+    def created_at(self) -> datetime:
+        """:class:`datetime.datetime`: Returns the user's creation time in UTC.
+
+        This is when the user's Discord account was created.
+        """
+        return snowflake_time(self.id)
+
+    def mentioned_in(self, message: Message) -> bool:
+        """Checks if the user is mentioned in the specified message.
+
+        Parameters
+        -----------
+        message: :class:`Message`
+            The message to check if you're mentioned in.
+
+        Returns
+        -------
+        :class:`bool`
+            Indicates if the user is mentioned in the message.
+        """
+
+        if message.mention_everyone:
+            return True
+
+        return any(user.id == self.id for user in message.mentions)
+
+    @classmethod
+    def _copy(cls: Type[BU], user: BU) -> BU:
+        self = cls.__new__(cls)  # bypass __init__
+        self.id = user.id
         return self
 
     async def _get_channel(self) -> DMChannel:

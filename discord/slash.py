@@ -26,6 +26,8 @@ DEALINGS IN THE SOFTWARE.
 from __future__ import annotations
 
 
+
+from .mixins import Hashable
 from .utils import All, MISSING
 from .errors import Forbidden, InvalidArgument
 from .enums import ApplicationCommandType, OptionType, ChannelType
@@ -184,7 +186,7 @@ class SlashOption:
         return payload
 
 
-class ApplicationCommand:
+class ApplicationCommand(Hashable):
 
     __slots__: Tuple[str, ...] = (
         '__aliases__',
@@ -469,11 +471,17 @@ class UserCommand(ContextCommand):
 
 
 class CommandStore:
-    __slots__: Tuple[str, ...] = ('api', 'state', '_cache', '_raw_cache', '_on_sync')
+    __slots__: Tuple[str, ...] = (
+        'api', 
+        '_state', 
+        '_cache', 
+        '_raw_cache', 
+        '_on_sync',
+    )
     
     def __init__(self, state, commands = []) -> None:
         self.api = APITools(state)
-        self.state: ConnectionState = state
+        self._state: ConnectionState = state
         self._cache: dict = {}
         self._raw_cache: Dict[int, ApplicationCommand] = {}    # dict with commands saved with their id
         # setup cache
@@ -691,10 +699,10 @@ class CommandStore:
         }
         return self
     def copy(self):
-        return self.__class__(self.state).load(self._cache)
+        return self.__class__(self._state).load(self._cache)
     def _add(self, command: ApplicationCommand):
         if command._state is None:
-            command._state = self.state
+            command._state = self._state
         type_key = str(command.type)
         if command.is_global():
             if command.is_subcommand():
@@ -771,7 +779,7 @@ class CommandStore:
         delete_unused: :class:`bool`, optional
             Whether commands that are not included in this cache should be deleted; default False
         """
-        http = self.state.slash_http
+        http = self._state.slash_http
         self._raw_cache = {}
         
 
@@ -795,6 +803,7 @@ class CommandStore:
         # 
         # for each guild
         for guild in self["!globals"]:
+            guild_object = self._state._get_guild(int(guild))
             # acces original dict with filtered keys
             for ct in self[guild]:
                 for base_name in self[guild][ct]:
@@ -816,6 +825,7 @@ class CommandStore:
                         await http.update_command_permissions(guild, api_command["id"], base.permissions.to_dict())
                     base.id = new_command["id"] if new_command else api_command["id"]
                     self._raw_cache[base.id] = base
+                    guild_object._add_channel
 
         if delete_unused is True:
             for global_command in await self.api.get_global_commands():
@@ -828,7 +838,7 @@ class CommandStore:
                 if self["globals"][key_type].get(global_command["name"]) is None:
                     await http.delete_global_command(global_command["id"])
                     continue
-            for guild in [str(x.id) for x in self.state.guilds]:
+            for guild in [str(x.id) for x in self._state.guilds]:
                 for guild_command in await self.api.get_guild_commands(guild):
                     # command in a guild we didn't register
                     if self.get(guild) is None:
@@ -844,7 +854,7 @@ class CommandStore:
                         await http.delete_guild_command(guild_command["id"], guild)
                         continue
         
-        self.state.dispatch('commands_synced')
+        self._state.dispatch('commands_synced')
         await self._on_sync()
     async def nuke(self, globals=True, guilds=All):
         """
@@ -875,18 +885,18 @@ class CommandStore:
         if guilds is None:
             guilds = []
         if globals is True:
-            await self.state.slash_http.delete_global_commands()
+            await self._state.slash_http.delete_global_commands()
         for id in guilds:
-            self.state.slash_http.delete_guild_commands(id)
+            self._state.slash_http.delete_guild_commands(id)
          
     def dispatch(self, type, interaction):
-        self.state.dispatch('application_command', interaction)
+        self._state.dispatch('application_command', interaction)
         if type == ApplicationCommandType.chat_input.value:
-            self.state.dispatch('slash_command', interaction, **interaction.options)
+            self._state.dispatch('slash_command', interaction, **interaction.options)
         if type == ApplicationCommandType.user.value:
-            self.state.dispatch('user_command', interaction, interaction.target)
+            self._state.dispatch('user_command', interaction, interaction.target)
         if type == ApplicationCommandType.message.value:
-            self.state.dispatch('message_command', interaction, interaction.target)
+            self._state.dispatch('message_command', interaction, interaction.target)
         if interaction.command:
             if type == ApplicationCommandType.chat_input.value:
                 promise = interaction.command(interaction, **interaction.options)
@@ -971,26 +981,26 @@ class CommandStore:
 class APITools():
     __slots__: Tuple[str, ...] = ('state',)
     def __init__(self, state) -> None:
-        self.state: ConnectionState = state
+        self._state: ConnectionState = state
 
     async def get_commands(self) -> List[dict]:
         return await self.get_global_commands() + await self.get_all_guild_commands()
     async def get_global_commands(self) -> List[dict]:
-        return await self.state.slash_http.get_global_commands()
+        return await self._state.slash_http.get_global_commands()
     async def get_global_command(self, name, typ) -> Union[dict, None]:
         for x in await self.get_global_commands():
             if x["name"] == name and x["type"] == typ:
                 return x
     async def get_all_guild_commands(self):
         commands = []
-        async for x in [x.id for x in self.state.guilds]:
+        async for x in [x.id for x in self._state.guilds]:
             try:
-                commands += await self.state.slash_http.get_guild_commands(x.id)
+                commands += await self._state.slash_http.get_guild_commands(x.id)
             except Forbidden:
                 continue
         return commands
     async def get_guild_commands(self, guild_id: str) -> List[dict]:
-        return await self.state.slash_http.get_guild_commands(guild_id)
+        return await self._state.slash_http.get_guild_commands(guild_id)
     async def get_guild_command(self, name, typ, guild_id) -> Union[dict, None]:
         # returns all commands in a guild
         for x in await self.get_guild_commands(guild_id):
